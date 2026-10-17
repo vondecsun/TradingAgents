@@ -13,3 +13,8 @@ results
 eval_results
 Dockerfile
 docker-compose.yml
+.product-venv
+product-data
+product/.env
+**/node_modules
+**/__pycache__

@@ -1,0 +1,11 @@
+# Place next to index.html in the hosted document root, not in /assets.
+Options -Indexes
+RewriteEngine On
+RewriteCond %{HTTPS} !=on
+RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [R=301,L]
+<IfModule mod_headers.c>
+Header always set X-Content-Type-Options "nosniff"
+Header always set Referrer-Policy "same-origin"
+Header always set X-Frame-Options "DENY"
+</IfModule>
+# Host-specific HTTPS/proxy handling must be checked before enabling redirects.

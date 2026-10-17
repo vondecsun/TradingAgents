@@ -1,0 +1,12 @@
+{
+  "name": "hengyan-product-tests",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Development-only DOM integration tests; front end needs no build",
+  "devDependencies": {
+    "jsdom": "27.0.1"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
