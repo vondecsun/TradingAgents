@@ -403,3 +403,32 @@ def test_native_batch_costs_permissions_and_missing_credentials(client,monkeypat
     assert post(client,'/research/backtests',h,payload).json()['id']==r.json()['id']
     assert post(client,'/research/backtests',h,{**payload,'idempotency_key':'large-batch','end':'2026-02-28'}).status_code==400
     assert post(client,'/research/settlement',h,{'idempotency_key':'settlement-api'}).status_code==202
+
+
+def test_local_super_member_opt_in_and_origin_guards(client, monkeypatch):
+    url='/api/v1/auth/local-test'
+    assert client.post(url).status_code == 403
+    monkeypatch.setenv('PRODUCT_LOCAL_TEST_LOGIN','true')
+    monkeypatch.setenv('PRODUCT_HOST','127.0.0.1')
+    assert client.post(url).status_code == 403  # testclient is not loopback
+    with TestClient(app,base_url='http://127.0.0.1:8765',client=('127.0.0.1',12345)) as local:
+        assert local.post(url,headers={'Origin':'https://evil.example'}).status_code==403
+        assert local.post(url,headers={'Host':'evil.example'}).status_code==403
+        assert local.post(url,headers={'Sec-Fetch-Site':'cross-site'}).status_code==403
+        r=local.post(url,headers={'Origin':'http://127.0.0.1:8765'})
+        assert r.status_code==200,r.text
+        h={'Authorization':'Bearer '+r.json()['token']}
+        me=local.get('/api/v1/me',headers=h).json()
+        assert me['email']=='vondecsun@gmail.com'
+        assert me['subscription']['plan']=='super_test'
+        assert me['subscription']['remaining']==1000000
+        assert me['internal_research'] is True
+        assert local.post(url).status_code==200
+        with db.transaction() as con:
+            assert con.execute('SELECT COUNT(*) FROM users').fetchone()[0]==1
+            assert con.execute('SELECT COUNT(*) FROM ledger').fetchone()[0]==1
+        monkeypatch.setenv('PRODUCT_LOCAL_TEST_LOGIN','false')
+        me=local.get('/api/v1/me',headers=h).json()
+        assert me['subscription']['plan']=='free'
+        assert not me['internal_research']
+        assert local.post(url).status_code==403

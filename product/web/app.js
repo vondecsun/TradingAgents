@@ -319,6 +319,15 @@ function login() {
         h("div", { class: "eyebrow" }, "WELCOME TO HENGYAN"),
         h("h2", {}, state.register ? "建立研究工作区" : "欢迎回来"),
         h("p", { class: "sub" }, "独立账户 · 私有任务 · 可追溯报告"),
+        button("本机超级会员免密测试 · vondecsun@gmail.com", async () => {
+          try {
+            const res = await api("/auth/local-test", "POST", {});
+            state.token = res.token;
+            sessionStorage.setItem("hy_token", res.token);
+            await refresh();
+            render();
+          } catch (err) { toast(err.message); }
+        }),
         form,
         h(
           "p",
@@ -1498,7 +1507,7 @@ function subscriptions() {
           h(
             "strong",
             {},
-            { free: "体验版", research: "研究版", pro: "专业版" }[s.plan],
+            { free: "体验版", research: "研究版", pro: "专业版", super_test: "超级会员（本机测试）" }[s.plan],
           ),
           badge(
             s.mode === "test"

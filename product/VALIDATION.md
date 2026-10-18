@@ -65,3 +65,11 @@ regulatory approval or readiness to accept real customer payments.
 - 93 original tradingagents/cli Python source files are pinned and unchanged.
 - No paid-provider live calls were made. Actual provider authentication, output
   quality, Windows native setup and target-host Docker build remain unverified.
+
+## v0.3.1 — local test member
+
+- 24 product tests passed, including opt-in loopback-only passwordless access,
+  Host/Origin/cross-site rejection, idempotent account creation and privilege
+  removal when the local test mode is disabled.
+- Root Windows launchers explicitly enable local test mode and bind to loopback.
+- The fixed test account receives a local-only test entitlement, never a paid subscription.

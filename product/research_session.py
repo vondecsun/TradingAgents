@@ -16,7 +16,7 @@ def main():
     from product.server.native import provider_registry
     registry=provider_registry()
     print('原生 TradingAgents 本地测试启动；不会自动调用收费模型。')
-    email=input('输入你在本软件注册的测试邮箱：').strip().lower()
+    email=(input('测试邮箱（回车使用 vondecsun@gmail.com）：').strip().lower() or 'vondecsun@gmail.com')
     if not re.fullmatch(r'[^\s@]+@[^\s@]+\.[^\s@]+',email):
         raise ValueError('邮箱格式无效')
     print('可选供应商：'+', '.join(registry))

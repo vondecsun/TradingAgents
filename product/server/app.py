@@ -62,7 +62,16 @@ def test_billing():
     return os.getenv('PRODUCT_TEST_BILLING', 'false').lower() == 'true'
 
 
+LOCAL_TEST_EMAIL = 'vondecsun@gmail.com'
+
+
+def local_test_enabled():
+    return os.getenv('PRODUCT_LOCAL_TEST_LOGIN', 'false').lower() == 'true' and os.getenv('PRODUCT_HOST', '127.0.0.1') == '127.0.0.1'
+
+
 def internal(email):
+    if local_test_enabled() and email == LOCAL_TEST_EMAIL:
+        return True
     return os.getenv('PRODUCT_INTERNAL_RESEARCH', 'false').lower() == 'true' and email in os.getenv('PRODUCT_INTERNAL_EMAILS', '').split(',')
 
 
@@ -78,6 +87,10 @@ def user(authorization: str = Header(default='')):
 
 
 def subscription(con, uid):
+    test_user = con.execute('SELECT email FROM users WHERE id=?', (uid,)).fetchone()
+    if local_test_enabled() and test_user and test_user['email'] == LOCAL_TEST_EMAIL:
+        used = con.execute('SELECT COALESCE(SUM(cost),0) FROM jobs WHERE user_id=? AND period=?', (uid, period())).fetchone()[0]
+        return {'plan':'super_test','quota':1000000,'used':used,'remaining':max(0,1000000-used),'expires':None,'mode':'local_test','period':period()}
     row = con.execute('SELECT * FROM subscriptions WHERE user_id=?', (uid,)).fetchone()
     plan = row['plan'] if row and row['expires'] > epoch() else 'free'
     used = con.execute('SELECT COALESCE(SUM(cost),0) FROM jobs WHERE user_id=? AND period=?', (uid, period())).fetchone()[0]
@@ -98,7 +111,7 @@ async def lifespan(app):
         thread.join(timeout=5)
 
 
-app = FastAPI(title='衡研 · A股研究工作台', version='0.3.0', lifespan=lifespan)
+app = FastAPI(title='衡研 · A股研究工作台', version='0.3.1', lifespan=lifespan)
 origins = [x.strip() for x in os.getenv('PRODUCT_CORS_ORIGINS', '').split(',') if x.strip()]
 if origins:
     app.add_middleware(CORSMiddleware, allow_origins=origins, allow_methods=['GET','POST','PUT','DELETE'], allow_headers=['Authorization','Content-Type'])
@@ -197,6 +210,31 @@ def login(data: Credentials, request: Request):
         return make_session(con,row['id'])
 
 
+@app.post(PREFIX+'/auth/local-test')
+def local_test_login(request: Request):
+    # No forwarded headers: require direct loopback peer, Host and same-origin browser.
+    allowed = {'127.0.0.1', 'localhost', '::1'}
+    origin = request.headers.get('origin')
+    if (not local_test_enabled() or not request.client or request.client.host not in allowed
+            or request.url.hostname not in allowed
+            or (origin and origin != str(request.base_url).rstrip('/'))
+            or request.headers.get('sec-fetch-site', 'same-origin') not in ('same-origin', 'none')):
+        error('local_test_disabled', '免密测试入口仅允许启用后的本机访问', 403)
+    rate_limit(request)
+    with db.transaction() as con:
+        row = con.execute('SELECT id FROM users WHERE email=?', (LOCAL_TEST_EMAIL,)).fetchone()
+        if row:
+            uid = row['id']
+        else:
+            uid = uuid.uuid4().hex
+            con.execute('INSERT INTO users VALUES(?,?,?,?)', (uid, LOCAL_TEST_EMAIL, password_hash(secrets.token_urlsafe(48)), now()))
+            today = date.today().isoformat()
+            con.execute('INSERT INTO accounts VALUES(?,?,?,?)', (uid,100000000,today,100000000))
+            con.execute('INSERT INTO ledger VALUES(?,?,?,?,?,?,?)', (uuid.uuid4().hex,uid,today,'initial',100000000,100000000,'virtual_initial_capital'))
+        audit(con,uid,'local_test_login')
+        return make_session(con,uid)
+
+
 @app.post(PREFIX+'/auth/logout')
 def logout(u=Depends(user), authorization: str=Header(default='')):
     with db.transaction() as con:
@@ -208,7 +246,7 @@ def logout(u=Depends(user), authorization: str=Header(default='')):
 def health():
     with db.transaction() as con:
         con.execute('SELECT 1')
-    return {'status':'ok','version':'0.3.0','live_trading':False}
+    return {'status':'ok','version':'0.3.1','live_trading':False}
 
 
 @app.get(PREFIX+'/me')
