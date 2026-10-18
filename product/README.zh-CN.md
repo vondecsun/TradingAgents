@@ -183,3 +183,11 @@ PRODUCT_INTERNAL_RESEARCH、PRODUCT_INTERNAL_EMAILS及所选供应商环境密�
 
 完整包推荐解压到 D:\WebCodex项目文件\Hengyan-v0.3.3，以便后续授权范围内直接排查。
 关闭旧窗口再运行START-RESEARCH-WINDOWS.bat。本轮尚未在真实DeepSeek接口验证。
+
+### 密钥输入修复
+
+Windows研究启动时会弹出遮蔽输入框，请在该窗口Ctrl+V粘贴完整API密钥。
+密钥不写入文件、浏览器或数据库；取消输入则取消启动。
+如果Tk图形组件不可用，控制台会提示改用右键粘贴。
+输入只有一个字符、含控制字符或带Bearer前缀时将重新询问，不调用模型。
+这只检查输入格式，不等于供应商认证或余额已验证。

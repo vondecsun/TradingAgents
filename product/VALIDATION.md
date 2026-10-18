@@ -109,3 +109,22 @@ regulatory approval or readiness to accept real customer payments.
   running folder outside its allowed root; no live folder was edited and no
   live model request was made. This compatibility fix is not a verified diagnosis
   of that particular request, nor proof of complete provider integration.
+
+## v0.3.3 key-input hotfix — confirmed local diagnosis
+
+- The running user worker's metadata showed DEEPSEEK_API_KEY length = 1.
+  No key value was read into tool output. Its minimal plain request returned
+  HTTP400 with an empty body before any tool or analyst execution.
+- Dummy-credential requests through direct HTTP, SDK, and original LangChain
+  clients all received expected HTTP401 responses. No valid model credentials
+  were used for those transport comparisons. The previous null-content fix
+  was not the cause of this user's plain-request failure.
+- Product Windows startup now offers a masked Tk input dialog with clipboard
+  paste support, reprompts on malformed input, and never persists the key.
+  Capability checks reject single-character/control-character credentials.
+- 35 product tests passed. On the actual Windows machine, edited modules
+  compiled, tkinter imported, and all 93 core hashes remained unchanged.
+- Changes were applied directly to the authorized local installation. Temporary
+  diagnostic code was removed and the engine restored to its original hash.
+- User must restart and enter the complete key locally. Full live-provider
+  validation remains pending; no claim of successful investment analysis.

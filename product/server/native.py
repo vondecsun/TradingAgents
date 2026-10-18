@@ -135,7 +135,9 @@ def capability(settings):
         provider=settings.get(tier+'_think_provider') or settings['llm_provider']
         env=registry[provider]
         optional=provider in ('ollama','openai_compatible','bedrock')
-        credentials.append({'tier':tier,'provider':provider,'model':settings[tier+'_think_llm'],'env_name':env,'configured':optional or bool(os.getenv(env or '')),'verified':False})
+        from product.key_input import credential_error
+        key_error=None if optional else credential_error(os.getenv(env or '', ''))
+        credentials.append({'credential_error':key_error,'tier':tier,'provider':provider,'model':settings[tier+'_think_llm'],'env_name':env,'configured':optional or key_error is None,'verified':False})
     return {'dependencies_ready':not missing,'missing_dependencies':missing,'tiers':credentials,'configured':not missing and all(x['configured'] for x in credentials),'live_verified':False,'note':'配置检测不是模型连接或分析质量验证；不会自动发起付费调用'}
 
 

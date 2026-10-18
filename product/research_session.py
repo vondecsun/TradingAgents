@@ -1,5 +1,4 @@
 """Local operator setup: keys stay in process environment, never files or browser."""
-from getpass import getpass
 import os
 from pathlib import Path
 import re
@@ -13,6 +12,7 @@ sys.path.insert(0,str(ROOT))
 
 
 def main():
+    from product.key_input import read_api_key
     from product.server.native import provider_registry
     registry=provider_registry()
     print('原生 TradingAgents 本地测试启动；不会自动调用收费模型。')
@@ -29,7 +29,7 @@ def main():
         raise ValueError('模型ID不能为空')
     variable=registry[provider]
     if variable and provider!='openai_compatible':
-        key=getpass('输入模型API密钥（不回显、不写入文件）：').strip()
+        key=read_api_key('输入模型API密钥（不回显、不写入文件）：')
         if not key:
             raise ValueError('缺少密钥')
         os.environ[variable]=key
@@ -45,7 +45,7 @@ def main():
         elif provider=='openai_compatible':
             raise ValueError('兼容服务需要明确端点')
         if variable:
-            key=getpass('端点密钥（本地无认证可留空）：').strip()
+            key=read_api_key('端点密钥（本地无认证可留空）：',optional=True)
             if key:os.environ[variable]=key
     os.environ.update(PRODUCT_INTERNAL_RESEARCH='true',PRODUCT_INTERNAL_EMAILS=email,
                       TRADINGAGENTS_LLM_PROVIDER=provider,TRADINGAGENTS_QUICK_THINK_LLM=quick,
