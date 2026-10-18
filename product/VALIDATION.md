@@ -73,3 +73,13 @@ regulatory approval or readiness to accept real customer payments.
   removal when the local test mode is disabled.
 - Root Windows launchers explicitly enable local test mode and bind to loopback.
 - The fixed test account receives a local-only test entitlement, never a paid subscription.
+
+## v0.3.2 — task failure diagnostics
+
+- 22 API/product tests passed in the current runtime (test_product.py), including
+  a real child-process failure surfaced in the task list and fixed safe error mapping.
+- Product worker/engine IPC explicitly uses UTF-8 on Windows.
+- Provider response bodies, prompts and keys are never copied into public error text.
+- Rechecked all 93 original Python source hashes: unchanged.
+- No live provider call was made; the user's two failures remain undiagnosed until
+  a new run supplies the classified error. This package is not proof of a model fix.

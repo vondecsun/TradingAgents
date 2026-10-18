@@ -29,10 +29,55 @@ def run(data):
     return report
 
 
+def failure_details(exc):
+    """Expose only fixed diagnostic text: never exception messages or provider bodies."""
+    chain=[]
+    current=exc
+    for _ in range(8):
+        if current is None or any(current is item for item in chain):
+            break
+        chain.append(current)
+        current=current.__cause__ or current.__context__
+    statuses=[getattr(item,'status_code',None) for item in chain]
+    names=' '.join(type(item).__name__.lower() for item in chain)
+    errors={
+        400:('provider_bad_request','外部服务拒绝请求参数（HTTP 400）：请核对模型ID、工具调用支持及参数配置'),
+        401:('model_auth_failed','模型认证失败（HTTP 401）：请核对密钥及所选供应商'),
+        402:('model_balance','模型服务拒绝请求（HTTP 402）：请检查余额或计费状态'),
+        403:('provider_forbidden','外部服务拒绝访问（HTTP 403）：请检查模型或数据源权限'),
+        404:('provider_not_found','外部服务资源不存在（HTTP 404）：请核对模型ID和服务端点'),
+        429:('provider_rate_limit','外部服务限流或额度不足（HTTP 429）：请检查配额后再试'),
+    }
+    for status in statuses:
+        if status in errors:
+            code,message=errors[status]
+            return {'code':code,'message':message}
+    if any(isinstance(item,(ImportError,ModuleNotFoundError)) for item in chain):
+        code,message='dependency_missing','研究依赖导入失败：请使用原生研究启动文件重新安装依赖'
+    elif 'unicode' in names:
+        code,message='encoding_error','运行环境字符编码异常：请使用新版完整包及原生研究启动文件'
+    elif 'timeout' in names:
+        code,message='provider_timeout','外部模型或数据源响应超时：请检查网络后重试'
+    elif any(term in names for term in ('connection','connecterror','proxyerror','sslerror')):
+        code,message='provider_connection','无法连接外部模型或数据源：请检查网络、代理和证书'
+    elif 'recursion' in names:
+        code,message='graph_limit','原生分析达到图执行次数上限：请核对工具调用与轮数设置'
+    else:
+        code,message='engine_failed','引擎运行失败（'+type(exc).__name__[:60]+'）；原因尚未归类，需要进一步诊断'
+    return {'code':code,'message':message}
+
+
 if __name__ == '__main__':
-    # Upstream libraries may print; isolate final JSON from their stdout.
+    # Product IPC always uses UTF-8, including Windows consoles with a legacy code page.
     import contextlib
-    data = json.load(sys.stdin)
-    with contextlib.redirect_stdout(sys.stderr):
-        output = run(data)
-    print(json.dumps(output, ensure_ascii=False))
+    for stream in (sys.stdin,sys.stdout,sys.stderr):
+        if hasattr(stream,'reconfigure'):
+            stream.reconfigure(encoding='utf-8',errors='replace')
+    try:
+        data = json.load(sys.stdin)
+        with contextlib.redirect_stdout(sys.stderr):
+            output = run(data)
+        print(json.dumps(output, ensure_ascii=False))
+    except Exception as exc:
+        print(json.dumps({'_engine_error':failure_details(exc)},ensure_ascii=False))
+        sys.exit(1)

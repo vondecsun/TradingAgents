@@ -29,8 +29,9 @@ def work(stop):
             job = dict(job)
             con.execute("UPDATE jobs SET status='running',stage='核对数据并生成报告',updated=? WHERE id=?", (now(), job['id']))
         process = None
+        failure = None
         try:
-            process = subprocess.Popen([sys.executable, '-m', 'product.server.engine'], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
+            process = subprocess.Popen([sys.executable, '-m', 'product.server.engine'], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, encoding='utf-8', errors='replace', env={**os.environ,'PYTHONUTF8':'1','PYTHONIOENCODING':'utf-8'})
             budget = int(os.getenv('PRODUCT_BACKTEST_TIMEOUT','7200')) if job['engine']=='backtest' else int(os.getenv('PRODUCT_RESEARCH_TIMEOUT','1800')) if job['engine'] in native.NATIVE_ENGINES else int(os.getenv('PRODUCT_JOB_TIMEOUT','300'))
             deadline = time.monotonic() + budget
             data=json.loads(job['input'])
@@ -57,9 +58,10 @@ def work(stop):
                         process.kill()
                         process.communicate()
                         raise InterruptedError('cancelled' if cancelled or stop.is_set() else 'timeout')
-            if process.returncode:
-                raise RuntimeError('engine_failed')
             report = json.loads(stdout)
+            if process.returncode or '_engine_error' in report:
+                failure = report.get('_engine_error')
+                raise RuntimeError('engine_failed')
             with transaction() as con:
                 cancelled = con.execute('SELECT cancel FROM jobs WHERE id=?', (job['id'],)).fetchone()[0]
                 if cancelled:
@@ -71,6 +73,11 @@ def work(stop):
                 process.kill()
                 process.communicate()
             code = str(exc) if isinstance(exc, InterruptedError) else 'engine_failed'
+            if failure:
+                code = failure['code']
             status = 'cancelled' if code == 'cancelled' else 'failed'
+            stage = '已取消' if status == 'cancelled' else (
+                failure['message'] if failure else '任务超过运行时限；检查点如已生成可用于恢复' if code == 'timeout'
+                else '引擎进程异常退出；检查点如已生成可用于恢复')
             with transaction() as con:
-                con.execute('UPDATE jobs SET status=?,stage=?,error=?,cost=0,updated=? WHERE id=?', (status, ('原生任务中断，已保留检查点；可手动恢复' if job['engine'] in native.NATIVE_ENGINES else '任务中断，额度已释放；请检查引擎配置') if status == 'failed' else '已取消', code, now(), job['id']))
+                con.execute('UPDATE jobs SET status=?,stage=?,error=?,cost=0,updated=? WHERE id=?', (status, stage, code, now(), job['id']))

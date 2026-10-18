@@ -111,7 +111,7 @@ async def lifespan(app):
         thread.join(timeout=5)
 
 
-app = FastAPI(title='衡研 · A股研究工作台', version='0.3.1', lifespan=lifespan)
+app = FastAPI(title='衡研 · A股研究工作台', version='0.3.2', lifespan=lifespan)
 origins = [x.strip() for x in os.getenv('PRODUCT_CORS_ORIGINS', '').split(',') if x.strip()]
 if origins:
     app.add_middleware(CORSMiddleware, allow_origins=origins, allow_methods=['GET','POST','PUT','DELETE'], allow_headers=['Authorization','Content-Type'])
@@ -246,7 +246,7 @@ def logout(u=Depends(user), authorization: str=Header(default='')):
 def health():
     with db.transaction() as con:
         con.execute('SELECT 1')
-    return {'status':'ok','version':'0.3.1','live_trading':False}
+    return {'status':'ok','version':'0.3.2','live_trading':False}
 
 
 @app.get(PREFIX+'/me')

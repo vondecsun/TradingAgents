@@ -432,3 +432,45 @@ def test_local_super_member_opt_in_and_origin_guards(client, monkeypatch):
         assert me['subscription']['plan']=='free'
         assert not me['internal_research']
         assert local.post(url).status_code==403
+
+
+def test_engine_diagnostics_do_not_expose_provider_secrets():
+    from product.server.engine import failure_details
+    class ProviderError(Exception):
+        status_code=401
+    private='secret-key-and-private-prompt'
+    failure=failure_details(ProviderError(private))
+    assert failure['code']=='model_auth_failed'
+    assert private not in json.dumps(failure)
+    for status,code in [(402,'model_balance'),(403,'provider_forbidden'),(404,'provider_not_found'),(429,'provider_rate_limit')]:
+        exc=ProviderError(private)
+        exc.status_code=status
+        assert failure_details(exc)['code']==code
+    assert failure_details(UnicodeEncodeError('ascii','中文',0,1,'bad'))['code']=='encoding_error'
+    assert failure_details(ModuleNotFoundError(private))['code']=='dependency_missing'
+    assert private not in json.dumps(failure_details(RuntimeError(private)))
+
+
+def test_worker_surfaces_safe_child_failure(client):
+    import threading
+    from product.server.worker import work
+    h=signup(client)
+    post(client,'/data/demo',h)
+    jid=post(client,'/analysis-jobs',h,{'symbol':'000001.SZ','idempotency_key':'failed-worker-test'}).json()['id']
+    with db.transaction() as con:
+        payload=json.loads(con.execute('SELECT input FROM jobs WHERE id=?',(jid,)).fetchone()[0])
+        payload['bars']=[]
+        con.execute('UPDATE jobs SET input=? WHERE id=?',(json.dumps(payload),jid))
+    stop=threading.Event()
+    thread=threading.Thread(target=work,args=(stop,))
+    thread.start()
+    try:
+        for _ in range(50):
+            item=get(client,'/analysis-jobs',h).json()['items'][0]
+            if item['status']=='failed':break
+            time.sleep(.1)
+        assert item['status']=='failed'
+        assert 'ValueError' in item['stage']
+        assert item['cost']==0
+    finally:
+        stop.set();thread.join(timeout=5)
