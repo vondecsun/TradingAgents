@@ -1,0 +1,8 @@
+# Validated protocol dependencies. Upstream code is unchanged.
+langchain-core==1.6.12
+langchain-openai==1.7.2
+langchain-anthropic==1.7.6
+langchain-google-genai==4.4.2
+langgraph==1.2.16
+langgraph-checkpoint-sqlite==3.1.2
+openai==3.35.1

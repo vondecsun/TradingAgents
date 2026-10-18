@@ -474,3 +474,22 @@ def test_worker_surfaces_safe_child_failure(client):
         assert item['cost']==0
     finally:
         stop.set();thread.join(timeout=5)
+
+
+def test_model_check_job_snapshot_and_authorization(client,monkeypatch):
+    from product.server import native
+    h=signup(client)
+    body={'idempotency_key':'model-protocol-check-1'}
+    assert post(client,'/research/model-check',h,body).status_code==403
+    monkeypatch.setenv('PRODUCT_INTERNAL_RESEARCH','true')
+    monkeypatch.setenv('PRODUCT_INTERNAL_EMAILS','tester@example.com')
+    monkeypatch.setattr(native,'require_ready',lambda settings:None)
+    r=post(client,'/research/model-check',h,body)
+    assert r.status_code==202,r.text
+    assert post(client,'/research/model-check',h,body).json()['id']==r.json()['id']
+    with db.transaction() as con:
+        row=con.execute('SELECT * FROM jobs WHERE id=?',(r.json()['id'],)).fetchone()
+        assert row['engine']=='model_check' and row['cost']==1
+        assert json.loads(row['input'])['research_settings']['analysts']==native.ANALYSTS
+    b=signup(client,'other@example.com')
+    assert get(client,'/reports/'+r.json()['id'],b).status_code==404

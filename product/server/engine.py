@@ -5,7 +5,7 @@ from decimal import Decimal
 
 
 def run(data):
-    if data['engine'] in ('tradingagents','backtest','settlement'):
+    if data['engine'] in ('tradingagents','backtest','settlement','model_check'):
         from .native import run as run_native
         return run_native(data)
     bars = data['bars']
@@ -31,6 +31,14 @@ def run(data):
 
 def failure_details(exc):
     """Expose only fixed diagnostic text: never exception messages or provider bodies."""
+    checks={
+        'model_check_tool_not_called':'模型自检未通过：模型没有执行要求的测试工具调用',
+        'model_check_unexpected_tool':'模型自检未通过：模型请求了未提供的测试工具',
+        'model_check_tool_not_finished':'模型自检未通过：工具返回后模型仍重复调用工具',
+        'model_check_structured_missing':'模型自检未通过：未收到预期的结构化输出',
+    }
+    if isinstance(exc,ValueError) and str(exc) in checks:
+        return {'code':str(exc),'message':checks[str(exc)]}
     chain=[]
     current=exc
     for _ in range(8):
@@ -48,6 +56,20 @@ def failure_details(exc):
         404:('provider_not_found','外部服务资源不存在（HTTP 404）：请核对模型ID和服务端点'),
         429:('provider_rate_limit','外部服务限流或额度不足（HTTP 429）：请检查配额后再试'),
     }
+    # Inspect only to select a fixed error category; never return provider bodies.
+    bodies=' '.join(str(getattr(item,'body','')) for item in chain).lower()
+    if 400 in statuses:
+        hints=[
+            ('reasoning_content','provider_reasoning_history','HTTP 400：供应商拒绝思考内容回传格式；请保留本任务，不要反复恢复'),
+            ('tool_choice','provider_tool_choice','HTTP 400：供应商不接受当前tool_choice工具选择参数'),
+            ('max_tokens','provider_token_limit','HTTP 400：max_tokens输出上限不符合该模型要求；请核对高级设置'),
+            ('max_completion_tokens','provider_token_limit','HTTP 400：输出token参数不符合该模型要求'),
+            ('content','provider_message_content','HTTP 400：供应商拒绝消息content内容格式'),
+            ('model','provider_model_parameter','HTTP 400：供应商拒绝model参数；请核对所选端点及模型权限'),
+            ('tools','provider_tools_schema','HTTP 400：供应商拒绝tools工具定义格式'),
+        ]
+        for word,code,message in hints:
+            if word in bodies:return {'code':code,'message':message}
     for status in statuses:
         if status in errors:
             code,message=errors[status]

@@ -8,7 +8,7 @@ if not exist ".product-venv\Scripts\python.exe" py -3 -m venv .product-venv
 if errorlevel 1 goto failed
 ".product-venv\Scripts\python.exe" -m pip install -r product\requirements.lock.txt
 if errorlevel 1 goto failed
-".product-venv\Scripts\python.exe" -m pip install .
+".product-venv\Scripts\python.exe" -m pip install -c product\research-constraints.txt .
 if errorlevel 1 goto failed
 ".product-venv\Scripts\python.exe" product\research_session.py
 if errorlevel 1 goto failed

@@ -167,3 +167,19 @@ PRODUCT_INTERNAL_RESEARCH、PRODUCT_INTERNAL_EMAILS及所选供应商环境密�
 下载完整包到新目录，关闭旧窗口，运行根目录START-RESEARCH-WINDOWS.bat。
 配置后仅提交一个新任务，若失败请提供任务列表中完整的新错误提示。
 旧任务已经保存的错误不会自动变成新错误，恢复旧任务仍使用它原有的设置快照。
+
+## v0.3.3 DeepSeek协议适配与模型自检
+
+产品层 provider_compat.py 处理SDK把工具调用后的assistant空字符串写成null的
+兼容问题，仅恢复为空字符串；工具调用参数和思考内容不变。未修改原仓库核心源码。
+原生研究启动脚本使用research-constraints.txt固定本轮测试过的模型SDK版本。
+
+进入原生研究页，先保存配置，再点“模型连接与工具协议自检（会调用API）”。
+该按钮使用账户当前保存的两层模型设置，通过原仓库客户端发起少量实际请求，
+分别验证普通调用、工具调用及回传、结构化输出。可能产生供应商费用。
+自检不调用行情源，也不代表完整分析或投资质量通过。成功可阅读自检报告；
+失败的HTTP400进一步按reasoning_content、tool_choice、max_tokens等识别字段分类，
+不向网页暴露供应商原始响应、密钥或提示词。
+
+完整包推荐解压到 D:\WebCodex项目文件\Hengyan-v0.3.3，以便后续授权范围内直接排查。
+关闭旧窗口再运行START-RESEARCH-WINDOWS.bat。本轮尚未在真实DeepSeek接口验证。

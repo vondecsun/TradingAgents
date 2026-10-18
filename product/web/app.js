@@ -375,7 +375,7 @@ function shell(content) {
         { class: "sidebar-bottom" },
         h("b", {}, "研究有边界，数据有出处"),
         h("p", {}, "当前仅提供数据核对与模拟操作。国金实盘尚未连接。"),
-        badge("PILOT · v0.3", "muted"),
+        badge("PILOT · v0.3.3", "muted"),
       ),
     ),
     h(
@@ -818,6 +818,7 @@ function jobs() {
                     tradingagents: "原生多代理",
                     backtest: "原生评级回测",
                     settlement: "历史结算",
+                    model_check: "模型协议自检",
                   }[j.engine],
                 ),
                 h(
@@ -901,7 +902,7 @@ function report() {
       "报告截至 " +
         r.as_of +
         " · " +
-        (r.engine === "facts" ? "确定性数据核对" : "原仓库原生研究"),
+        (r.engine === "facts" ? "确定性数据核对" : r.engine === "model_check" ? "模型协议自检 · 非投资分析" : "原仓库原生研究"),
       [
         button("返回任务", () => navigate("jobs")),
         button(
@@ -918,7 +919,7 @@ function report() {
     ),
     r.native
       ? card(
-          "原生功能覆盖",
+          r.engine === "model_check" ? "模型协议自检范围" : "原生功能覆盖",
           h(
             "div",
             {},
@@ -2017,6 +2018,11 @@ function nativeResearch() {
           "div",
           {},
           tiers,
+          ready ? button("模型连接与工具协议自检（会调用API）", async () => {
+            await api("/research/model-check", "POST", {idempotency_key: crypto.randomUUID()});
+            await navigate("jobs");
+            toast("已提交模型自检；将分别验证两层模型，可能产生供应商费用");
+          }, "primary") : null,
           h(
             "p",
             { class: "sub" },
@@ -2181,7 +2187,7 @@ function settings() {
           h(
             "p",
             { class: "sub" },
-            "当前版本 v0.3.0 · 单主机试运行架构。会话有效期8小时，退出后服务端撤销当前会话。邮箱验证、密码找回、多端会话管理和运维后台尚未实现。",
+            "当前版本 v0.3.3 · 单主机试运行架构。会话有效期8小时，退出后服务端撤销当前会话。邮箱验证、密码找回、多端会话管理和运维后台尚未实现。",
           ),
           h(
             "div",

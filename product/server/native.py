@@ -16,7 +16,7 @@ from . import db, market
 
 ROOT=Path(__file__).resolve().parents[2]
 ANALYSTS=['market','social','news','fundamentals']
-NATIVE_ENGINES=('tradingagents','backtest','settlement')
+NATIVE_ENGINES=('tradingagents','backtest','settlement','model_check')
 # The provider mapping comes from the upstream light-weight registry.
 
 def upstream_defaults():
@@ -196,6 +196,12 @@ def _base(data,title):
 
 
 def run(data):
+    from .provider_compat import compatible_clients
+    with compatible_clients():
+        return _run(data)
+
+
+def _run(data):
     """Invoke upstream analysis/backtest/settlement without rewriting any agent."""
     from tradingagents.graph.trading_graph import TradingAgentsGraph
     from tradingagents.reporting import _SECTIONS
@@ -206,6 +212,8 @@ def run(data):
         return json.loads(output.read_text(encoding='utf-8'))
     settings=ResearchSettings(**data['research_settings']).model_dump()
     config=build_config(settings,uid,jid)
+    if data['engine']=='model_check':
+        return check_models(data,config)
     portfolio=portfolio_context(data.get('portfolio'))
     callbacks=[stages_callback(uid,jid)]
     atomic_json(progress_path(uid,jid),{'stage':'正在构建原仓库代理图','model_calls':0})
@@ -254,4 +262,43 @@ def run(data):
             report['sections'].append({'title':'数据与执行范围','text':'本报告调用原仓库完整代理图及其配置数据源；不以网页已下载日线冒充新闻、基本面或情绪证据。评级不是实盘指令。未输出的角色在覆盖表中明确标记。'})
     report['source_integrity']=integrity()
     atomic_json(output,report)
+    return report
+
+
+def check_models(data,config):
+    """Explicit, small paid check through original provider clients, no market data."""
+    from tradingagents.llm_clients.factory import create_tier_client
+    from langchain_core.messages import HumanMessage,ToolMessage
+    from pydantic import BaseModel
+    class ProbeResult(BaseModel):
+        status: str
+    tool={'type':'function','function':{'name':'connection_probe','description':'Return a fixed local connection-test value; no external actions.','parameters':{'type':'object','properties':{},'additionalProperties':False}}}
+    sections=[]
+    for tier in ('quick','deep'):
+        llm=create_tier_client({**config,'llm_max_retries':0},tier).get_llm()
+        prefix='快速模型' if tier=='quick' else '深度模型'
+        atomic_json(progress_path(data['_user_id'],data['_job_id']),{'stage':prefix+'：普通请求自检'})
+        llm.invoke([HumanMessage(content='Connection test only. Reply OK.')])
+        atomic_json(progress_path(data['_user_id'],data['_job_id']),{'stage':prefix+'：工具调用与回传自检'})
+        messages=[HumanMessage(content='Connection test only. Call connection_probe once with no arguments. After its result, reply OK without further tool calls.')]
+        bound=llm.bind_tools([tool])
+        reply=bound.invoke(messages)
+        if not reply.tool_calls:
+            raise ValueError('model_check_tool_not_called')
+        for call in reply.tool_calls:
+            if call['name']!='connection_probe':raise ValueError('model_check_unexpected_tool')
+        followup=bound.invoke([*messages,reply,*[ToolMessage(content='OK',tool_call_id=call['id']) for call in reply.tool_calls]])
+        if followup.tool_calls:raise ValueError('model_check_tool_not_finished')
+        atomic_json(progress_path(data['_user_id'],data['_job_id']),{'stage':prefix+'：结构化输出自检'})
+        result=llm.with_structured_output(ProbeResult).invoke([HumanMessage(content='Connection test only. Return the ProbeResult schema with status OK.')])
+        if not isinstance(result,ProbeResult):raise ValueError('model_check_structured_missing')
+        sections.append({'title':prefix,'text':'普通请求、工具调用、工具结果与思考字段回传、结构化输出均通过。本测试不验证行情数据源或投资分析质量。'})
+    report=_base(data,'原生模型连接与工具协议自检')
+    report['sections']=sections
+    report['source']='原仓库模型客户端的协议自检；未访问行情源、未执行投资分析'
+    report['mode']='model_check'
+    report['live_verified']=True
+    report['settings']={key:config.get(key) for key in ('llm_provider','quick_think_provider','deep_think_provider','quick_think_llm','deep_think_llm')}
+    report['source_integrity']=integrity()
+    atomic_json(job_root(data['_user_id'],data['_job_id'])/'result.json',report)
     return report

@@ -111,7 +111,7 @@ async def lifespan(app):
         thread.join(timeout=5)
 
 
-app = FastAPI(title='衡研 · A股研究工作台', version='0.3.2', lifespan=lifespan)
+app = FastAPI(title='衡研 · A股研究工作台', version='0.3.3', lifespan=lifespan)
 origins = [x.strip() for x in os.getenv('PRODUCT_CORS_ORIGINS', '').split(',') if x.strip()]
 if origins:
     app.add_middleware(CORSMiddleware, allow_origins=origins, allow_methods=['GET','POST','PUT','DELETE'], allow_headers=['Authorization','Content-Type'])
@@ -246,7 +246,7 @@ def logout(u=Depends(user), authorization: str=Header(default='')):
 def health():
     with db.transaction() as con:
         con.execute('SELECT 1')
-    return {'status':'ok','version':'0.3.2','live_trading':False}
+    return {'status':'ok','version':'0.3.3','live_trading':False}
 
 
 @app.get(PREFIX+'/me')
@@ -648,10 +648,17 @@ def enqueue_native(con,u,engine,idem,extra,cost):
         error('queue_limit','最多两个未完成任务',429)
     jid=uuid.uuid4().hex
     payload={'engine':engine,'research_settings':settings,'_user_id':u['id'],'_job_id':jid,'reserved_cost':cost,**extra}
-    symbol=','.join(extra.get('tickers',[])) or '历史决策结算'
+    symbol=extra.get('symbol') or ','.join(extra.get('tickers',[])) or '历史决策结算'
     con.execute('INSERT INTO jobs VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',(jid,u['id'],idem,symbol,engine,'queued','原生任务等待执行',now(),now(),None,None,period(),cost,0,json.dumps(payload,ensure_ascii=False)))
     audit(con,u['id'],'native_job_created',jid)
     return {'id':jid,'status':'queued'}
+
+
+@app.post(PREFIX+'/research/model-check',status_code=202)
+def model_check(data: NativeSettlement,u=Depends(user)):
+    if not internal(u['email']):error('internal_only','模型自检仅对内部测试账户开放',403)
+    with db.transaction() as con:
+        return enqueue_native(con,u,'model_check',data.idempotency_key,{'as_of':date.today().isoformat(),'symbol':'MODEL-CHECK'},1)
 
 
 @app.post(PREFIX+'/research/backtests',status_code=202)
