@@ -98,3 +98,12 @@ def test_safe_settings_and_tenant_paths():
     with pytest.raises(ValueError):native.ResearchSettings(llm_provider='invented')
     settings=native.ResearchSettings(llm_provider='deepseek',quick_think_llm='deepseek-chat',deep_think_llm='deepseek-reasoner')
     assert settings.model_dump()['analysts']==native.ANALYSTS
+
+
+def test_missing_market_data_stops_before_any_model_call(upstream_offline,monkeypatch):
+    from tradingagents.dataflows import router
+    model,called=upstream_offline
+    monkeypatch.setattr(router,'route_to_vendor',lambda *a,**k:'DATA_UNAVAILABLE: synthetic source failure')
+    with pytest.raises(ValueError,match='market_data_unavailable'):
+        run(payload(jid='e'*32))
+    assert model.calls==[]

@@ -1,0 +1,19 @@
+{
+  "date": "2026-10-19",
+  "timezone": "Asia/Shanghai",
+  "symbol": "600036.SS",
+  "model_calls": 0,
+  "before": {
+    "error": "curl 77 certificate bundle load failure",
+    "unicode_ca_path": true
+  },
+  "after_tls_fix": {
+    "ca_path_ascii": true,
+    "yahoo_query1_http": 403,
+    "yahoo_query2_http": 403,
+    "upstream_yfinance": "rate limited after three retries"
+  },
+  "ohlcv_retrieval_verified": false,
+  "ssl_verification_disabled": false,
+  "core_files_unchanged": 93
+}

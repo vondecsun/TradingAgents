@@ -242,6 +242,17 @@ def _run(data):
             report['settlement']={'settled':settled.settled,'failed':[(x[0],x[1],'upstream_settlement_failed') for x in settled.failed],'entries':entries}
         else:
             ticker=market.normalize_symbol(data['symbol']).replace('.SH','.SS')
+            # Product-level admission check: do not spend model calls on missing prices.
+            gate=folder/'data-preflight.json'
+            if not gate.is_file():
+                from datetime import datetime,timedelta
+                from tradingagents.dataflows.router import route_to_vendor
+                begin=(datetime.strptime(data['as_of'],'%Y-%m-%d')-timedelta(days=30)).date().isoformat()
+                atomic_json(progress_path(uid,jid),{'stage':'正在预检已配置的行情源（尚未调用模型）','model_calls':0})
+                prices=route_to_vendor('get_stock_data',ticker,begin,data['as_of'])
+                if not isinstance(prices,str) or not prices.strip() or prices.startswith(('DATA_UNAVAILABLE:','NO_DATA_AVAILABLE:')):
+                    raise ValueError('market_data_unavailable')
+                atomic_json(gate,{'symbol':ticker,'as_of':data['as_of'],'configured_source_preflight':True})
             state,rating=graph.propagate(ticker,data['as_of'],portfolio=portfolio)
             graph.save_reports(state,ticker,save_path=folder/'reports',html=True)
             report=_base(data,data['symbol']+' · TradingAgents 完整原生分析')

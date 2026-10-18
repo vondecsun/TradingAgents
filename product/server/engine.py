@@ -5,6 +5,8 @@ from decimal import Decimal
 
 
 def run(data):
+    from product.tls_setup import configure_tls
+    configure_tls()
     if data['engine'] in ('tradingagents','backtest','settlement','model_check'):
         from .native import run as run_native
         return run_native(data)
@@ -32,6 +34,7 @@ def run(data):
 def failure_details(exc):
     """Expose only fixed diagnostic text: never exception messages or provider bodies."""
     checks={
+        'market_data_unavailable':'行情源预检失败：已在模型调用前停止；请检查数据源连接、限流或配置可用的A股数据接口',
         'model_check_tool_not_called':'模型自检未通过：模型没有执行要求的测试工具调用',
         'model_check_unexpected_tool':'模型自检未通过：模型请求了未提供的测试工具',
         'model_check_tool_not_finished':'模型自检未通过：工具返回后模型仍重复调用工具',

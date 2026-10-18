@@ -128,3 +128,21 @@ regulatory approval or readiness to accept real customer payments.
   diagnostic code was removed and the engine restored to its original hash.
 - User must restart and enter the complete key locally. Full live-provider
   validation remains pending; no claim of successful investment analysis.
+
+## Windows Unicode CA path and source admission hotfix
+
+- Actual Windows curl_cffi request reproduced curl77 loading certifi from the
+  Unicode project directory. Product startup and engine now copy the same CA
+  trust bundle into a private ASCII temporary path before importing curl. HTTPS
+  verification remains enabled; explicit custom CA bundles are preserved.
+- Actual TLS error disappeared. Both Yahoo chart hosts then returned HTTP403;
+  the original yfinance stock-data function remained rate limited after its
+  built-in retries. OHLCV retrieval was NOT successful. No model calls made.
+- 37 product tests passed after the TLS fix; 7 focused native/TLS tests passed
+  after adding the admission guard, including zero model calls on missing data.
+- Fresh native analyses now preflight the configured price vendor before
+  propagate; unavailable data fails without spending model calls. A successful
+  preflight marker is kept per job so normal checkpoint retries retain it.
+- Only product files changed. 93 original core Python files remain unchanged.
+- See LIVE_DATA_CHECK.json. A working, authorized A-share vendor integration is
+  still needed for stable data access; the external Yahoo restriction is open.

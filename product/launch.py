@@ -16,6 +16,8 @@ if config.exists():
             k,v=line.split('=',1)
             os.environ.setdefault(k.strip(),v.strip().strip('"').strip("'"))
 if __name__ == '__main__':
+    from product.tls_setup import configure_tls
+    configure_tls()
     import uvicorn
     host = os.getenv('PRODUCT_HOST','127.0.0.1')
     port = int(os.getenv('PRODUCT_PORT','8765'))
