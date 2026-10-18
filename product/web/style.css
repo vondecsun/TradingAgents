@@ -826,3 +826,20 @@ footer {
 #online-history-form > .sub {
   margin-top: 12px;
 }
+
+textarea {
+  width: 100%;
+  padding: 11px 12px;
+  border: 1px solid #dce5e1;
+  border-radius: 6px;
+  font:
+    12px ui-monospace,
+    monospace;
+  color: #29434b;
+  resize: vertical;
+  background: #fff;
+}
+#native-analysis .btn.primary,
+#native-backtest .btn.primary {
+  margin-top: 14px;
+}

@@ -3,13 +3,34 @@ services:
     build:
       context: ../..
       dockerfile: product/deploy/Dockerfile
+      args:
+        INSTALL_RESEARCH: "${PRODUCT_INSTALL_RESEARCH:-false}"
     ports:
       - "127.0.0.1:8765:8765"
     environment:
       PRODUCT_TEST_BILLING: "false"
-      PRODUCT_INTERNAL_RESEARCH: "false"
+      PRODUCT_INTERNAL_RESEARCH: "${PRODUCT_INTERNAL_RESEARCH:-false}"
+      PRODUCT_INTERNAL_EMAILS: "${PRODUCT_INTERNAL_EMAILS:-}"
       PRODUCT_PUBLIC_HISTORY: "${PRODUCT_PUBLIC_HISTORY:-disabled}"
       PRODUCT_CORS_ORIGINS: "${PRODUCT_CORS_ORIGINS:-}"
+      ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-}"
+      AZURE_OPENAI_API_KEY: "${AZURE_OPENAI_API_KEY:-}"
+      DASHSCOPE_API_KEY: "${DASHSCOPE_API_KEY:-}"
+      DASHSCOPE_CN_API_KEY: "${DASHSCOPE_CN_API_KEY:-}"
+      DEEPSEEK_API_KEY: "${DEEPSEEK_API_KEY:-}"
+      GOOGLE_API_KEY: "${GOOGLE_API_KEY:-}"
+      GROQ_API_KEY: "${GROQ_API_KEY:-}"
+      MINIMAX_API_KEY: "${MINIMAX_API_KEY:-}"
+      MINIMAX_CN_API_KEY: "${MINIMAX_CN_API_KEY:-}"
+      MISTRAL_API_KEY: "${MISTRAL_API_KEY:-}"
+      MOONSHOT_API_KEY: "${MOONSHOT_API_KEY:-}"
+      NVIDIA_API_KEY: "${NVIDIA_API_KEY:-}"
+      OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
+      OPENAI_COMPATIBLE_API_KEY: "${OPENAI_COMPATIBLE_API_KEY:-}"
+      OPENROUTER_API_KEY: "${OPENROUTER_API_KEY:-}"
+      XAI_API_KEY: "${XAI_API_KEY:-}"
+      ZHIPU_API_KEY: "${ZHIPU_API_KEY:-}"
+      ZHIPU_CN_API_KEY: "${ZHIPU_CN_API_KEY:-}"
     volumes:
       - product-data:/data
     restart: unless-stopped

@@ -23,7 +23,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field, StrictInt
 
-from . import db, paper, worker, market
+from . import db, paper, worker, market, native
 
 PREFIX = '/api/v1'
 PLANS = {'free': {'quota': 5, 'price': 0}, 'research': {'quota': 100, 'price': 9900}, 'pro': {'quota': 500, 'price': 19900}}
@@ -98,10 +98,10 @@ async def lifespan(app):
         thread.join(timeout=5)
 
 
-app = FastAPI(title='衡研 · A股研究工作台', version='0.2.0', lifespan=lifespan)
+app = FastAPI(title='衡研 · A股研究工作台', version='0.3.0', lifespan=lifespan)
 origins = [x.strip() for x in os.getenv('PRODUCT_CORS_ORIGINS', '').split(',') if x.strip()]
 if origins:
-    app.add_middleware(CORSMiddleware, allow_origins=origins, allow_methods=['GET','POST','DELETE'], allow_headers=['Authorization','Content-Type'])
+    app.add_middleware(CORSMiddleware, allow_origins=origins, allow_methods=['GET','POST','PUT','DELETE'], allow_headers=['Authorization','Content-Type'])
 
 
 @app.middleware('http')
@@ -208,7 +208,7 @@ def logout(u=Depends(user), authorization: str=Header(default='')):
 def health():
     with db.transaction() as con:
         con.execute('SELECT 1')
-    return {'status':'ok','version':'0.2.0','live_trading':False}
+    return {'status':'ok','version':'0.3.0','live_trading':False}
 
 
 @app.get(PREFIX+'/me')
@@ -460,6 +460,8 @@ class Job(Model):
     symbol: str = Field(max_length=12)
     engine: Literal['facts','tradingagents'] = 'facts'
     idempotency_key: str = Field(min_length=8,max_length=100)
+    analysis_date: date | None = None
+    portfolio: dict | None = None
 
 
 @app.post(PREFIX+'/analysis-jobs',status_code=202)
@@ -471,6 +473,8 @@ def create_job(data: Job,u=Depends(user)):
         if old:
             if old['symbol'] != data.symbol or old['engine'] != data.engine:
                 error('idempotency_conflict','同一幂等键不能创建不同任务',409)
+            if data.engine == 'tradingagents' and json.loads(old['input']).get('request') != data.model_dump(mode='json'):
+                error('idempotency_conflict','同一幂等键不能更改原生分析参数',409)
             return {'id':old['id'],'status':old['status']}
         ent = subscription(con,u['id'])
         if not ent['remaining']:
@@ -484,14 +488,22 @@ def create_job(data: Job,u=Depends(user)):
             rows = [dict(r) for r in con.execute('SELECT * FROM market_bars WHERE user_id=? AND symbol=? ORDER BY date DESC LIMIT 250',(u['id'],data.symbol))][::-1]
         else:
             rows = [dict(r) for r in con.execute('SELECT * FROM bars WHERE user_id=? AND symbol=? AND date<=? ORDER BY date DESC LIMIT 250',(u['id'],data.symbol,as_of))][::-1]
-        if not rows:
+        if not rows and data.engine == 'facts':
             error('no_data','请先一键获取此证券的日线行情')
-        if data.engine == 'tradingagents' and rows[-1]['mode'] == 'demo':
-            error('demo_research','演示数据不可用于真实多代理研究')
         for row in rows:
             row.pop('user_id',None)
         jid = uuid.uuid4().hex
-        payload = json.dumps({'bars':rows,'symbol':data.symbol,'as_of':as_of,'engine':data.engine},ensure_ascii=False)
+        payload_data={'bars':rows,'symbol':data.symbol,'as_of':as_of,'engine':data.engine}
+        if data.engine == 'tradingagents':
+            settings=native.load_settings(con,u['id'])
+            native.require_ready(settings)
+            as_of=online or date.today().isoformat()
+            if data.analysis_date:
+                if data.analysis_date>date.today():
+                    error('future_date','分析日期不能在未来')
+                as_of=data.analysis_date.isoformat()
+            payload_data.update(request=data.model_dump(mode='json'),as_of=as_of,research_settings=settings,_user_id=u['id'],_job_id=jid,portfolio=validated_portfolio(data.portfolio),reserved_cost=1)
+        payload = json.dumps(payload_data,ensure_ascii=False)
         con.execute('INSERT INTO jobs VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',(jid,u['id'],data.idempotency_key,data.symbol,data.engine,'queued','排队等待',now(),now(),None,None,period(),1,0,payload))
         audit(con,u['id'],'analysis_created',jid)
         return {'id':jid,'status':'queued'}
@@ -509,7 +521,7 @@ def report(jid: str,u=Depends(user)):
         row = con.execute('SELECT report,engine FROM jobs WHERE id=? AND user_id=? AND status=?',(jid,u['id'],'completed')).fetchone()
         if not row:
             error('report_not_found','报告不存在或尚未完成',404)
-        if row['engine'] == 'tradingagents' and not internal(u['email']):
+        if row['engine'] in native.NATIVE_ENGINES and not internal(u['email']):
             error('internal_only','此报告仅供内部研究',403)
         return json.loads(row['report'])
 
@@ -527,6 +539,148 @@ def cancel_job(jid: str,u=Depends(user)):
         else:
             error('job_terminal','任务已经结束',409)
     return {'ok':True}
+
+
+class PositionInput(Model):
+    ticker: str
+    quantity: int = Field(ge=0,le=1000000000)
+    average_price: float | None=Field(default=None,ge=0,allow_inf_nan=False)
+
+
+class PortfolioInput(Model):
+    cash: float | None=Field(default=None,ge=0,allow_inf_nan=False)
+    currency: Literal['CNY']='CNY'
+    positions: list[PositionInput]=Field(default_factory=list,max_length=100)
+
+
+def validated_portfolio(value):
+    if value is None:
+        return None
+    try:
+        result=PortfolioInput(**value).model_dump()
+        for position in result['positions']:
+            position['ticker']=market.normalize_symbol(position['ticker'])
+        return result
+    except (ValueError,TypeError):
+        error('invalid_portfolio','持仓格式无效：需提供cash、currency=CNY和positions中的ticker/quantity/average_price')
+
+
+@app.get(PREFIX+'/research/config')
+def research_config(u=Depends(user)):
+    with db.transaction() as con:
+        settings=native.load_settings(con,u['id'])
+    return {'settings':settings,'capability':native.capability(settings),'authorized':internal(u['email']),'providers':list(native.provider_registry()),'source_integrity':native.integrity()}
+
+
+@app.put(PREFIX+'/research/config')
+def save_research_config(data: native.ResearchSettings,u=Depends(user)):
+    if not internal(u['email']):
+        error('internal_only','原生研究设置目前仅对内部测试账户开放',403)
+    with db.transaction() as con:
+        con.execute('INSERT OR REPLACE INTO research_settings VALUES(?,?)',(u['id'],json.dumps(data.model_dump(),ensure_ascii=False)))
+        audit(con,u['id'],'research_settings_updated')
+    return {'ok':True,'capability':native.capability(data.model_dump())}
+
+
+class NativeBatch(Model):
+    tickers: list[str]=Field(min_length=1,max_length=3)
+    start: date
+    end: date
+    every_n_days: int=Field(default=7,ge=1,le=60)
+    idempotency_key: str=Field(min_length=8,max_length=100)
+    portfolio: dict | None=None
+
+
+class NativeSettlement(Model):
+    idempotency_key: str=Field(min_length=8,max_length=100)
+
+
+def enqueue_native(con,u,engine,idem,extra,cost):
+    old=con.execute('SELECT * FROM jobs WHERE user_id=? AND idem=?',(u['id'],idem)).fetchone()
+    if old:
+        saved=json.loads(old['input'])
+        if old['engine']!=engine or any(saved.get(k)!=v for k,v in extra.items()):
+            error('idempotency_conflict','幂等键已用于其他参数',409)
+        return {'id':old['id'],'status':old['status']}
+    settings=native.load_settings(con,u['id'])
+    native.require_ready(settings)
+    if subscription(con,u['id'])['remaining']<cost:
+        error('quota_exhausted','剩余额度不足；回测按证券×日期单元预留额度',403)
+    if con.execute("SELECT COUNT(*) FROM jobs WHERE user_id=? AND status IN ('queued','running')",(u['id'],)).fetchone()[0]>=2:
+        error('queue_limit','最多两个未完成任务',429)
+    jid=uuid.uuid4().hex
+    payload={'engine':engine,'research_settings':settings,'_user_id':u['id'],'_job_id':jid,'reserved_cost':cost,**extra}
+    symbol=','.join(extra.get('tickers',[])) or '历史决策结算'
+    con.execute('INSERT INTO jobs VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',(jid,u['id'],idem,symbol,engine,'queued','原生任务等待执行',now(),now(),None,None,period(),cost,0,json.dumps(payload,ensure_ascii=False)))
+    audit(con,u['id'],'native_job_created',jid)
+    return {'id':jid,'status':'queued'}
+
+
+@app.post(PREFIX+'/research/backtests',status_code=202)
+def backtest(data: NativeBatch,u=Depends(user)):
+    if not internal(u['email']):error('internal_only','原生回测仅供内部测试',403)
+    if data.start>data.end or data.end>date.today() or (data.end-data.start).days>366:
+        error('date_range','回测区间无效；单批最多一年')
+    tickers=list(dict.fromkeys(market.normalize_symbol(x) for x in data.tickers))
+    dates=[]
+    cursor=data.start
+    while cursor<=data.end:
+        dates.append(cursor.isoformat());cursor+=timedelta(days=data.every_n_days)
+    cost=len(tickers)*len(dates)
+    if cost>16:error('batch_limit','单批最多16个证券×日期单元；请缩小范围')
+    with db.transaction() as con:
+        return enqueue_native(con,u,'backtest',data.idempotency_key,{'tickers':tickers,'dates':dates,'portfolio':validated_portfolio(data.portfolio)},cost)
+
+
+@app.post(PREFIX+'/research/settlement',status_code=202)
+def settle(data: NativeSettlement,u=Depends(user)):
+    if not internal(u['email']):error('internal_only','结算仅供内部测试',403)
+    with db.transaction() as con:
+        return enqueue_native(con,u,'settlement',data.idempotency_key,{},1)
+
+
+@app.post(PREFIX+'/research/jobs/{jid}/resume',status_code=202)
+def resume_native(jid: str,u=Depends(user)):
+    if not internal(u['email']):error('internal_only','原生恢复仅供内部测试',403)
+    with db.transaction() as con:
+        row=con.execute('SELECT * FROM jobs WHERE id=? AND user_id=?',(jid,u['id'])).fetchone()
+        if not row:error('not_found','任务不存在',404)
+        if row['engine'] not in native.NATIVE_ENGINES or row['status'] not in ('failed','cancelled'):
+            error('not_resumable','仅失败或取消的原生任务可恢复',409)
+        payload=json.loads(row['input'])
+        if 'research_settings' not in payload:error('legacy_job','旧版任务不含恢复快照，请新建原生任务',409)
+        native.require_ready(payload['research_settings'])
+        cost=payload.get('reserved_cost',1)
+        if subscription(con,u['id'])['remaining']<cost:error('quota_exhausted','恢复任务的剩余额度不足',403)
+        if con.execute("SELECT COUNT(*) FROM jobs WHERE user_id=? AND status IN ('queued','running')",(u['id'],)).fetchone()[0]>=2:
+            error('queue_limit','最多两个未完成任务',429)
+        con.execute("UPDATE jobs SET status='queued',stage='等待恢复原生检查点',cancel=0,error=NULL,cost=?,period=?,updated=? WHERE id=?",(cost,period(),now(),jid))
+        audit(con,u['id'],'native_job_resumed',jid)
+    return {'id':jid,'status':'queued'}
+
+
+@app.get(PREFIX+'/research/memory')
+def research_memory(u=Depends(user)):
+    if not internal(u['email']):error('internal_only','历史记忆仅供内部账户查看',403)
+    try:
+        from tradingagents.memory.log import TradingMemoryLog
+    except ImportError:
+        error('dependencies_missing','请先安装原生研究依赖',503)
+    log=TradingMemoryLog({'memory_log_path':str(native.tenant_root(u['id'])/'memory'/'trading_memory.md')})
+    return {'items':log.load_entries()[-100:]}
+
+
+@app.get(PREFIX+'/research/jobs/{jid}/artifact')
+def research_artifact(jid: str,format: Literal['html','md','json']='html',u=Depends(user)):
+    if not internal(u['email']):error('internal_only','原生报告仅供内部账户查看',403)
+    with db.transaction() as con:
+        row=con.execute('SELECT status,engine FROM jobs WHERE id=? AND user_id=?',(jid,u['id'])).fetchone()
+    if not row or row['status']!='completed' or row['engine'] not in native.NATIVE_ENGINES:
+        error('not_found','原生报告不存在',404)
+    folder=native.job_root(u['id'],jid)
+    path=folder/'result.json' if format=='json' else folder/'reports'/('complete_report.'+format)
+    if not path.is_file():error('not_found','此任务没有该格式报告',404)
+    return FileResponse(path,filename='tradingagents-'+jid+'.'+format,media_type='application/octet-stream')
 
 
 class Plan(Model):

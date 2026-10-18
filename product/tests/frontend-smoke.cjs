@@ -27,11 +27,12 @@ async function wait(predicate, label) {
   throw Error("Timeout: " + label + "\n" + text().slice(-2000));
 }
 function click(label) {
-  const el = [...w.document.querySelectorAll("button")].find(
-    (x) =>
-      x.textContent.trim() === label ||
-      (x.closest("nav") && x.textContent.trim().endsWith(label)),
-  );
+  const buttons = [...w.document.querySelectorAll("button")];
+  const el =
+    buttons.find((x) => x.textContent.trim() === label) ||
+    buttons.find(
+      (x) => x.closest("nav") && x.textContent.trim().endsWith(label),
+    );
   assert(el, "Button missing: " + label);
   assert(!el.disabled, "Button disabled: " + label);
   el.click();
@@ -45,11 +46,26 @@ async function main() {
     .querySelector("form")
     .dispatchEvent(new w.Event("submit", { bubbles: true, cancelable: true }));
   await wait(() => text().includes("模拟总资产"), "registration and dashboard");
+  click("原生多代理研究");
+  await wait(
+    () => text().includes("上游核心保真检查"),
+    "native research capability page",
+  );
+  assert.equal(
+    w.document.querySelectorAll("#native-settings input[name=analysts]:checked")
+      .length,
+    4,
+  );
+  assert(
+    w.document.querySelector("#native-analysis button[type=submit]").disabled,
+    "unconfigured native analysis must not silently fall back",
+  );
+  assert(text().includes("原始核心代码一致"));
   click("数据中心");
   await wait(() => text().includes("一键获取历史行情"), "data center");
   w.document.querySelector("details").open = true;
   click("载入合成演示数据");
-  await wait(() => text().includes("合成演示"), "demo workspace");
+  await wait(() => text().includes("已载入合成演示数据，非真实行情"), "demo workspace");
   click("自选行情");
   await wait(() => text().includes("证券列表"), "market navigation");
   const search = w.document.querySelector("input[type=search]");

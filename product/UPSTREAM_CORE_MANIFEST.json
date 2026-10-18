@@ -1,0 +1,379 @@
+{
+  "repository": "https://github.com/vondecsun/TradingAgents",
+  "upstream_version": "0.6.0",
+  "source_commit": "1394a3f72aa4393e1a98f51b382434c4b4c2d972",
+  "files": [
+    {
+      "path": "cli/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "cli/announcements.py",
+      "sha256": "a4181c2804487939b3af9e44a90e098511abe2389964c8e8aeea22b542155016"
+    },
+    {
+      "path": "cli/config.py",
+      "sha256": "80f45b542b9842df01b413fd3fe74b086c838163f3a184d97a43ee1290087fa3"
+    },
+    {
+      "path": "cli/display.py",
+      "sha256": "5e7e5bc05e280d450870b9c80d194ec0a363fad4b68e199567ddf6e130e8c97f"
+    },
+    {
+      "path": "cli/main.py",
+      "sha256": "4c2e5c73f7980f7d2a97726ac6322c043cc2478a4de6efd1a391800d0a8b0f12"
+    },
+    {
+      "path": "cli/models.py",
+      "sha256": "2363534e647d6278f2d6075739bd8373322a32775f303ce15dd83d29dc437072"
+    },
+    {
+      "path": "cli/prefs.py",
+      "sha256": "fcafee69e383c0d286b0ed6113b8a8cc483e7428f38c64ab8d16effa14999236"
+    },
+    {
+      "path": "cli/prompts.py",
+      "sha256": "3f5128b3d7f3564224a0694423d597e907061607e6e9e9ce133948a8acdeeba9"
+    },
+    {
+      "path": "cli/run.py",
+      "sha256": "34eb7c9e8940c87894d5af3a9a656775e23da923a0a632d371ce02a4ecfb59fc"
+    },
+    {
+      "path": "cli/selections.py",
+      "sha256": "40b613564b22dc9691e811a52e4f916cd87b5d0b67ca97be244e15f75609632e"
+    },
+    {
+      "path": "cli/stats_handler.py",
+      "sha256": "3f9e0c9a37e50af1e5a26724b53b5dd5cb2f988dc277ac7a7347817a974dae22"
+    },
+    {
+      "path": "tradingagents/__init__.py",
+      "sha256": "3f0d6849a19802b42d542c25d5577bde8cc2b9129f5a9c56056f18711700f715"
+    },
+    {
+      "path": "tradingagents/agents/__init__.py",
+      "sha256": "678113367f806b26a26ff36054ad866d0d9315073564ba06a8d61fd08ffaf9fb"
+    },
+    {
+      "path": "tradingagents/agents/analysts/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tradingagents/agents/analysts/fundamentals_analyst.py",
+      "sha256": "daa6deb211ffea262da168a935464080cd75e61815d164502d6466dbd60845b4"
+    },
+    {
+      "path": "tradingagents/agents/analysts/market_analyst.py",
+      "sha256": "b9b1562d0c5beafd578380aa5b60534da7601b640b7e8d8869363d309ac0b066"
+    },
+    {
+      "path": "tradingagents/agents/analysts/news_analyst.py",
+      "sha256": "fbc22552cd6ae0306ef66a891fb7f7ca5de4f528f12402ebab3c68d2c8c58cba"
+    },
+    {
+      "path": "tradingagents/agents/analysts/sentiment_analyst.py",
+      "sha256": "120743700e4e9eb718b868b0e0c702c47e142c845e784f8ebb535e2d409263df"
+    },
+    {
+      "path": "tradingagents/agents/analysts/turn.py",
+      "sha256": "94fa951444f53fc3923e5100c1468c10f179eb4c22acc6f59a4351f1c2b8b484"
+    },
+    {
+      "path": "tradingagents/agents/context.py",
+      "sha256": "b039623a86856206ce397fcbafd8ef0d9de161d6042772bea2dfc6fec95233dd"
+    },
+    {
+      "path": "tradingagents/agents/managers/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tradingagents/agents/managers/portfolio_manager.py",
+      "sha256": "a6c62bf32a99003109179d645b2d98eee66090b5a6453ceb53a475f5bf900bba"
+    },
+    {
+      "path": "tradingagents/agents/managers/research_manager.py",
+      "sha256": "60386f2afe3e4b7411b68d8e67a83a6b899ba8aa61a2bec5e9d080feb731c1f7"
+    },
+    {
+      "path": "tradingagents/agents/post_screen.py",
+      "sha256": "1aa4ada438d9ffeb817b4fb0067bbd46d730e736b00e8640446da483f8be73a9"
+    },
+    {
+      "path": "tradingagents/agents/rating.py",
+      "sha256": "90ab5951c3438ba8d9f7536a80c6b5824a6b56ae5cda83f31ada1be311866a52"
+    },
+    {
+      "path": "tradingagents/agents/researchers/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tradingagents/agents/researchers/bear_researcher.py",
+      "sha256": "112e9355e59acfe146b19f0c72d320ea487390b7dcbc711c953844966ba86f58"
+    },
+    {
+      "path": "tradingagents/agents/researchers/bull_researcher.py",
+      "sha256": "46783042b021db22e0586caacfbdd6f2dde42c74e4ef51c15420cb9192ee3350"
+    },
+    {
+      "path": "tradingagents/agents/risk_mgmt/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tradingagents/agents/risk_mgmt/aggressive_debator.py",
+      "sha256": "f2ddbc28dbeb2786f4c1dcf0c1ef3a54b564fbf118ca14e6a72a3259870b6113"
+    },
+    {
+      "path": "tradingagents/agents/risk_mgmt/conservative_debator.py",
+      "sha256": "a1d688a37b05cf12a8e16aa51cafffe39594a50e1b49c225e5de564fb5254639"
+    },
+    {
+      "path": "tradingagents/agents/risk_mgmt/neutral_debator.py",
+      "sha256": "30dfd1b81bff24f8053a9583e6cc4411e3e3d3fdb94b32de10a42df753dc27e1"
+    },
+    {
+      "path": "tradingagents/agents/schemas.py",
+      "sha256": "782b842c2ef030f690219385364ea2a3a58d98ff6478c62050f5d86a25127534"
+    },
+    {
+      "path": "tradingagents/agents/state.py",
+      "sha256": "6b665f8c3758adb6efebaf5ca5f01e375657ba7386ec9805607ceb2080b25e27"
+    },
+    {
+      "path": "tradingagents/agents/structured.py",
+      "sha256": "66bc812c51a11a696b84b6c3b3fe529a4aeb0a69ede8c3137f38ae9278bd830a"
+    },
+    {
+      "path": "tradingagents/agents/tools.py",
+      "sha256": "34172e04bb247923eef29620032b8e62bc1791a5b802637e46ed4cc0b5220837"
+    },
+    {
+      "path": "tradingagents/agents/trader/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tradingagents/agents/trader/trader.py",
+      "sha256": "ce2ee336dc21a5cd59215a7944ab0a701e633c40478598f0416bee95d01c3cef"
+    },
+    {
+      "path": "tradingagents/backtest.py",
+      "sha256": "997232fc9530771a3e83dadbe1ee49bb78a642ef2c97cbbb70c410821373ef00"
+    },
+    {
+      "path": "tradingagents/dataflows/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tradingagents/dataflows/config.py",
+      "sha256": "0158c7a3bf506eb8d633896632858eb086ecbd063c78344b58f145201928314f"
+    },
+    {
+      "path": "tradingagents/dataflows/date_window.py",
+      "sha256": "e2668904533e9ec0bfcf9dd7fd5adba7508d9597b4e85982625c819c2407072a"
+    },
+    {
+      "path": "tradingagents/dataflows/errors.py",
+      "sha256": "ceaff104123ac2a55b50635f27d39f80b6455c74617f67f7f54d908e00477b13"
+    },
+    {
+      "path": "tradingagents/dataflows/files.py",
+      "sha256": "dbeea3f16d2424678b664fb39ac484718fc6e452607bd6d0b3625943d755ebe1"
+    },
+    {
+      "path": "tradingagents/dataflows/net.py",
+      "sha256": "f7d9945e487c300867d111310e10316063cb0cac95a764ad4140d77d89a52b76"
+    },
+    {
+      "path": "tradingagents/dataflows/router.py",
+      "sha256": "1956d24f0f0bac0da044251e14a6f4a038d748fd8dbe9f9806365fd097a49ea9"
+    },
+    {
+      "path": "tradingagents/dataflows/symbols.py",
+      "sha256": "15335e01f1532ea51e12f6ace2d0bec3058d6975eac93bed5ed07f2d4e550528"
+    },
+    {
+      "path": "tradingagents/dataflows/vendors/__init__.py",
+      "sha256": "a867066a8b045938c175d598c2a5108275a8c825cc6d939d990aa9d053d79b8e"
+    },
+    {
+      "path": "tradingagents/dataflows/vendors/alpha_vantage/__init__.py",
+      "sha256": "1e21b5bae37737cba9e0c2e87132487332275a38b925f6fabc868e7b9d41f7d1"
+    },
+    {
+      "path": "tradingagents/dataflows/vendors/alpha_vantage/common.py",
+      "sha256": "225c2651a636c4a6b0733cd3a66feacaff1732fce7b2f512a16140bd483bd82a"
+    },
+    {
+      "path": "tradingagents/dataflows/vendors/alpha_vantage/fundamentals.py",
+      "sha256": "e7ecb7f3af77dd78ca8d334e925af3325d1cb06a20eae6e1c1be03740b781b66"
+    },
+    {
+      "path": "tradingagents/dataflows/vendors/alpha_vantage/indicator.py",
+      "sha256": "d5f8ccc72aff89559611febf7eb543d54b6efb303d270049f300fcd5e0bf756b"
+    },
+    {
+      "path": "tradingagents/dataflows/vendors/alpha_vantage/news.py",
+      "sha256": "5aa9639cba6735d52cb02f14ccce3e78e42b0f287b1d9333fe5142cb4da66fc6"
+    },
+    {
+      "path": "tradingagents/dataflows/vendors/alpha_vantage/stock.py",
+      "sha256": "17633620192f0005f58de3f7dc1671ac3ee8b7d96cf20283e74648b70225cd5c"
+    },
+    {
+      "path": "tradingagents/dataflows/vendors/fred.py",
+      "sha256": "905ea6412067145a10c71f0e07b83624769d6e3379dd10391a47b045857ef6d7"
+    },
+    {
+      "path": "tradingagents/dataflows/vendors/polymarket.py",
+      "sha256": "2a50bbe8dc9daec7a029ed2c024d3a00268ca83cabbfa2271e7e8f5b6633a75c"
+    },
+    {
+      "path": "tradingagents/dataflows/vendors/reddit.py",
+      "sha256": "0b7f56fc3c757202cca3fd7cc3ed4390d5d3519fa5be6d7e38fe157c00e3186c"
+    },
+    {
+      "path": "tradingagents/dataflows/vendors/sec_edgar.py",
+      "sha256": "0189154cb5c76082e3aca5e0e187c677a857e56bd1a5aee49dddb10f1f989f9c"
+    },
+    {
+      "path": "tradingagents/dataflows/vendors/stocktwits.py",
+      "sha256": "675c41346d41cd8e21f283dfaff592ee047f4ac245a3e47a1a709a6073d3006e"
+    },
+    {
+      "path": "tradingagents/dataflows/vendors/yahoo/__init__.py",
+      "sha256": "4edf2362854ee40ec5fa7e769d64bde32b7070b42c5dfa2abb728267884d6552"
+    },
+    {
+      "path": "tradingagents/dataflows/vendors/yahoo/common.py",
+      "sha256": "6f75f46575fef14ad8fc3212b7c3a8d2ee00d2bd73de9a473c78ce02926e0821"
+    },
+    {
+      "path": "tradingagents/dataflows/vendors/yahoo/fundamentals.py",
+      "sha256": "d0f7eb8d3d4e8798bd8c4d47a59299fe8f40479f936aa7c0008f9b8cd9acc7c2"
+    },
+    {
+      "path": "tradingagents/dataflows/vendors/yahoo/market.py",
+      "sha256": "7f406c9c5109a4de818a33827bba747673f5e56db62fe4b9b6c88c81b5228979"
+    },
+    {
+      "path": "tradingagents/dataflows/vendors/yahoo/news.py",
+      "sha256": "9f56dcc58bae002a4e7c19e0f659504fabfb7132aef535e248bc7d080b30b7eb"
+    },
+    {
+      "path": "tradingagents/dataflows/vendors/yahoo/ohlcv.py",
+      "sha256": "0de8de042d903912711fa66e9f6e08d644bc474a54783ebf6ebbfc79892ff77d"
+    },
+    {
+      "path": "tradingagents/dataflows/vendors/yahoo/snapshot.py",
+      "sha256": "e84e4049516e88f5dd8eb70540f2356a498532b84cca16fc97e9df478ae58615"
+    },
+    {
+      "path": "tradingagents/default_config.py",
+      "sha256": "d03ea9ce6f683178a527b55eb60e45ccec54f942b75da93af223ec4b0f7d1bc6"
+    },
+    {
+      "path": "tradingagents/graph/__init__.py",
+      "sha256": "3c5ec25eb68097a8ec82ab3e1877d2b028e1aa9c85339e7008b508a5e335210d"
+    },
+    {
+      "path": "tradingagents/graph/analyst_execution.py",
+      "sha256": "2cee40303e18c19bf77d36a7f3d91ba431c84dfd53031139dd34411f2c694456"
+    },
+    {
+      "path": "tradingagents/graph/checkpointer.py",
+      "sha256": "f1ccb055601a8267f0b136482b06d853bd173a83a63c7d04c30f69ac65f3c295"
+    },
+    {
+      "path": "tradingagents/graph/conditional_logic.py",
+      "sha256": "3c9f344071552b95b59e0e78302ba73b77236afc895effcc0007ebf3eea4a3e3"
+    },
+    {
+      "path": "tradingagents/graph/propagation.py",
+      "sha256": "49519fc3726d096fa1746e085537d886c27da633835cd693c097595ceb4c55b6"
+    },
+    {
+      "path": "tradingagents/graph/setup.py",
+      "sha256": "a2790ebd549ff082e114b43201997ac29b7e58d00e643536d4ced8e949c855be"
+    },
+    {
+      "path": "tradingagents/graph/trading_graph.py",
+      "sha256": "7cbd1602cd30026b7ced30fcd1478fbaef274466cf710b248f1f2cd701eca020"
+    },
+    {
+      "path": "tradingagents/llm_clients/__init__.py",
+      "sha256": "548fda2ec116932a327f7dd9fae96cd9702f64dd872b8026d31635eb8264300c"
+    },
+    {
+      "path": "tradingagents/llm_clients/anthropic_client.py",
+      "sha256": "f9ea621a9820737b97bc336d2d67d64c8f66ae730aced02020d0f91cc2f0efaf"
+    },
+    {
+      "path": "tradingagents/llm_clients/api_key_env.py",
+      "sha256": "d33027a73bfab085d0d7cdddd3d449a10bec8a4bfebbd293e46e17f83beccb01"
+    },
+    {
+      "path": "tradingagents/llm_clients/azure_client.py",
+      "sha256": "8a269a0243d633631581f3c127885bba9dd2a2afb839dab5d160a1f19ef4058c"
+    },
+    {
+      "path": "tradingagents/llm_clients/base_client.py",
+      "sha256": "5af145a100b42e5de2c3baffcde0f3975fd826b14c1659c4ee44a300affa0c38"
+    },
+    {
+      "path": "tradingagents/llm_clients/bedrock_client.py",
+      "sha256": "aa279ec2956d1811683ebed4a7267657d53dc0a900c7185a07e2cfab03d9d99a"
+    },
+    {
+      "path": "tradingagents/llm_clients/capabilities.py",
+      "sha256": "b9fd431371cc8f70a2ac832adfd73a79c3b5339ad6fd9449641bef24df6ce564"
+    },
+    {
+      "path": "tradingagents/llm_clients/factory.py",
+      "sha256": "937b65ce28cb1949d8220372ecf1b2ed00ca0fd19af3db227f7e6ea155cc32f1"
+    },
+    {
+      "path": "tradingagents/llm_clients/google_client.py",
+      "sha256": "6079f050a8a46cc388e5ce79e1e6f4489f350225838dd5bc17607d549a6d9ea4"
+    },
+    {
+      "path": "tradingagents/llm_clients/model_catalog.py",
+      "sha256": "3042e6b9a87e966724b98f31bf33b23038808ece9609533c5cccb01ee5f06d34"
+    },
+    {
+      "path": "tradingagents/llm_clients/openai_client.py",
+      "sha256": "102021874099ceeb2dc47bb74762046cdee82af82879e9542cb3083edd92ea48"
+    },
+    {
+      "path": "tradingagents/llm_clients/validators.py",
+      "sha256": "5571d82c1c4c2ec6bc191e769e4d81fd4c9155c7f2557cd3665c03b9f4d82a46"
+    },
+    {
+      "path": "tradingagents/memory/__init__.py",
+      "sha256": "8e56b432cb14a223acd2a831845e79c5e0e978c5e1d561399e0028f0211c8636"
+    },
+    {
+      "path": "tradingagents/memory/log.py",
+      "sha256": "7b15db223fa839f09223e9f0fddd95d93fd8eb0dfd6911a218d1bb5b8c06841a"
+    },
+    {
+      "path": "tradingagents/memory/reflection.py",
+      "sha256": "e19a503853cf4c4b3127d018aa9bad21ea1f852140e69e5aad0715777cf319f2"
+    },
+    {
+      "path": "tradingagents/memory/settlement.py",
+      "sha256": "3a9081ce4515358d4b628ebfb25d4305312d782446f83b0ba0579185a3cb466e"
+    },
+    {
+      "path": "tradingagents/portfolio.py",
+      "sha256": "59f52f1a0c5402ff1313eef9deae0c378aa3996e23ba202abc983d2cae6b07ed"
+    },
+    {
+      "path": "tradingagents/report_html.py",
+      "sha256": "ac10574c39fc16b128cdc30aee60fab8e011b05a83fcddffa0cfa587ce05ae11"
+    },
+    {
+      "path": "tradingagents/reporting.py",
+      "sha256": "463a91765a8b5ec43a26cdfc3f6ff0ed0d7cb20748885644f59786de96528949"
+    }
+  ]
+}

@@ -5,6 +5,9 @@ from decimal import Decimal
 
 
 def run(data):
+    if data['engine'] in ('tradingagents','backtest','settlement'):
+        from .native import run as run_native
+        return run_native(data)
     bars = data['bars']
     if not bars:
         raise ValueError('没有可用历史数据')
@@ -23,24 +26,6 @@ def run(data):
         'evidence': [{'symbol': b['symbol'], 'date': b['date'], 'close': b['close'], 'source': b['source']} for b in bars[-20:]],
         'internal_only': data['engine'] == 'tradingagents',
     }
-    if data['engine'] == 'tradingagents':
-        if last['mode'] == 'demo':
-            raise ValueError('演示数据不能提交真实研究引擎')
-        from tradingagents.graph.trading_graph import TradingAgentsGraph
-        from tradingagents.default_config import build_default_config
-        config = build_default_config()
-        # No shared memories/checkpoints/reports between tenants or runs.
-        from tempfile import TemporaryDirectory
-        from pathlib import Path
-        with TemporaryDirectory(prefix='ta-job-') as folder:
-            config.update(results_dir=folder, data_cache_dir=str(Path(folder)/'cache'),
-                          memory_log_path=str(Path(folder)/'memory.md'), output_language='简体中文')
-            state, rating = TradingAgentsGraph(config=config).propagate(data['symbol'], data['as_of'])
-            for key, title in [('market_report','技术研究'),('news_report','新闻研究'),('fundamentals_report','基本面研究'),('final_trade_decision','内部研究结论')]:
-                if state.get(key):
-                    report['sections'].append({'title': title, 'text': str(state[key])[:30000]})
-            report['rating'] = rating
-            report['sections'].append({'title': '内部研究范围', 'text': 'TradingAgents独立获取其配置数据源，不代表使用导入CSV重建完整历史信息；不得作为实盘委托。'})
     return report
 
 

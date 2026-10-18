@@ -50,3 +50,18 @@ regulatory approval or readiness to accept real customer payments.
   enabled as a hidden fallback. Only the explicitly identified Yahoo source is used.
 - Windows native runtime, graphical layout and the user's running local process
   have not been updated or verified automatically.
+
+## v0.3 — original-core integration, 2026-10-18
+
+- 23 product tests passed. Four of these execute the original graph with the
+  source repository's scripted model/vendor fixtures, not replacement agents.
+- Verified 12-role output, every original analyst tool route, full native reports,
+  portfolio input, durable isolated memory, fewer calls on checkpoint resume,
+  original backtest/summarize and automatic/manual reflection settlement.
+- API checks cover native settings snapshots, missing-key rejection without
+  fallback, batch quotas, explicit resume, cross-user resume/artifact denial.
+- Selected original core tests: 204 passed across graph end-to-end, checkpoint
+  lifecycle/resume, reporting/HTML, portfolio context, memory/time cutoff, backtest.
+- 93 original tradingagents/cli Python source files are pinned and unchanged.
+- No paid-provider live calls were made. Actual provider authentication, output
+  quality, Windows native setup and target-host Docker build remain unverified.

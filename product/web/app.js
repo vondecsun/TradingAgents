@@ -14,6 +14,8 @@ const state = {
   bars: [],
   report: null,
   register: false,
+  research: null,
+  memory: [],
 };
 const names = {
   "600519.SH": "贵州茅台",
@@ -33,6 +35,7 @@ const statusNames = {
 const navs = [
   ["dashboard", "◈", "工作台"],
   ["watchlist", "☆", "自选行情"],
+  ["research", "◎", "原生多代理研究"],
   ["jobs", "▤", "研究任务"],
   ["paper", "⇄", "模拟交易"],
   ["data", "▦", "数据中心"],
@@ -41,6 +44,7 @@ const navs = [
 ];
 const labels = Object.fromEntries(navs.map((x) => [x[0], x[2]]));
 let timer;
+let refreshSequence=0;
 function h(tag, attrs = {}, ...children) {
   const el = document.createElement(tag);
   for (const [k, v] of Object.entries(attrs)) {
@@ -177,18 +181,23 @@ function download(name, text, type = "text/plain;charset=utf-8") {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 async function refresh() {
-  const [me, market, account, jobs, history, paperMarket] = await Promise.all([
-    api("/me"),
-    api("/instruments"),
-    api("/paper/account"),
-    api("/analysis-jobs"),
-    api("/paper/history"),
-    api("/instruments?scope=paper"),
-  ]);
+  const sequence=++refreshSequence;
+  const [me, market, account, jobs, history, paperMarket, research] =
+    await Promise.all([
+      api("/me"),
+      api("/instruments"),
+      api("/paper/account"),
+      api("/analysis-jobs"),
+      api("/paper/history"),
+      api("/instruments?scope=paper"),
+      api("/research/config"),
+    ]);
+  if(sequence!==refreshSequence)return;
   Object.assign(state, {
     me,
     market: market.items,
     paperMarket: paperMarket.items,
+    research,
     account,
     jobs: jobs.items,
     history,
@@ -199,8 +208,10 @@ async function refresh() {
     state.market.length
   )
     state.selected = state.market[0].symbol;
-  if (state.selected)
-    state.bars = (await api("/instruments/" + state.selected + "/bars")).items;
+  if (state.selected) {
+    const items=(await api("/instruments/"+state.selected+"/bars")).items;
+    if(sequence===refreshSequence)state.bars=items;
+  }
 }
 async function navigate(view) {
   state.view = view;
@@ -355,7 +366,7 @@ function shell(content) {
         { class: "sidebar-bottom" },
         h("b", {}, "研究有边界，数据有出处"),
         h("p", {}, "当前仅提供数据核对与模拟操作。国金实盘尚未连接。"),
-        badge("PILOT · v0.2", "muted"),
+        badge("PILOT · v0.3", "muted"),
       ),
     ),
     h(
@@ -733,11 +744,12 @@ function watchlist() {
   const engine = h(
     "select",
     { id: "engine", "aria-label": "研究引擎" },
-    h("option", { value: "facts" }, "数据核对（非AI荐股）"),
+    h("option", { value: "facts" }, "轻量数据核对（不是多代理）"),
     state.me.internal_research
       ? h("option", { value: "tradingagents" }, "TradingAgents · 内部研究")
       : null,
   );
+  if (state.me.internal_research) engine.value = "tradingagents";
   const container = h("div", {}, stockTable(state.market));
   return [
     heading(
@@ -789,7 +801,16 @@ function jobs() {
                 "tr",
                 {},
                 h("td", {}, j.symbol),
-                h("td", {}, j.engine === "facts" ? "数据核对" : "内部多代理"),
+                h(
+                  "td",
+                  {},
+                  {
+                    facts: "轻量数据核对",
+                    tradingagents: "原生多代理",
+                    backtest: "原生评级回测",
+                    settlement: "历史结算",
+                  }[j.engine],
+                ),
                 h(
                   "td",
                   {},
@@ -822,7 +843,25 @@ function jobs() {
                           },
                           "small",
                         )
-                      : h("span", { class: "muted" }, "额度已释放"),
+                      : ["tradingagents", "backtest", "settlement"].includes(
+                            j.engine,
+                          ) && state.me.internal_research
+                        ? button(
+                            "恢复原生任务",
+                            async () => {
+                              await api(
+                                "/research/jobs/" + j.id + "/resume",
+                                "POST",
+                              );
+                              await refresh();
+                              render();
+                              toast(
+                                "已重新排队，将优先恢复已有检查点或已完成单元",
+                              );
+                            },
+                            "small",
+                          )
+                        : h("span", { class: "muted" }, "额度已释放"),
                 ),
               ),
             ),
@@ -841,6 +880,7 @@ function jobs() {
 }
 async function openReport(id) {
   state.report = await api("/reports/" + id);
+  state.report.job_id = id;
   state.view = "report";
   render();
 }
@@ -852,7 +892,7 @@ function report() {
       "报告截至 " +
         r.as_of +
         " · " +
-        (r.engine === "facts" ? "确定性数据核对" : "内部多代理研究"),
+        (r.engine === "facts" ? "确定性数据核对" : "原仓库原生研究"),
       [
         button("返回任务", () => navigate("jobs")),
         button(
@@ -867,6 +907,52 @@ function report() {
         ),
       ],
     ),
+    r.native
+      ? card(
+          "原生功能覆盖",
+          h(
+            "div",
+            {},
+            h(
+              "p",
+              { class: "sub" },
+              "TradingAgents " +
+                (r.source_integrity?.upstream_version || "") +
+                " · 原始核心源码校验：" +
+                (r.source_integrity?.unchanged ? "一致" : "有变更"),
+            ),
+            h(
+              "div",
+              { class: "chips" },
+              (r.coverage || []).map((x) =>
+                badge(
+                  x.agent + (x.available ? " ✓" : " · 未输出"),
+                  x.available ? "" : "warn",
+                ),
+              ),
+            ),
+            h(
+              "div",
+              { class: "actions" },
+              button("导出原生JSON", () => nativeArtifact(r, "json"), "small"),
+              r.engine === "tradingagents"
+                ? button(
+                    "原仓库HTML报告",
+                    () => nativeArtifact(r, "html"),
+                    "small",
+                  )
+                : null,
+              r.engine === "tradingagents"
+                ? button(
+                    "原仓库Markdown报告",
+                    () => nativeArtifact(r, "md"),
+                    "small",
+                  )
+                : null,
+            ),
+          ),
+        )
+      : null,
     h(
       "div",
       { class: "report-head" },
@@ -875,7 +961,9 @@ function report() {
           ? "合成演示数据"
           : r.mode === "online"
             ? "在线获取日线"
-            : "用户导入数据",
+            : r.mode === "upstream"
+              ? "原仓库独立数据源"
+              : "用户导入数据",
         r.mode === "demo" ? "warn" : "muted",
       ),
       badge(r.internal_only ? "仅限内部研究" : "事实核对"),
@@ -1503,6 +1591,490 @@ function subscriptions() {
     ),
   ];
 }
+async function nativeArtifact(report, format) {
+  const response = await fetch(
+    API_BASE +
+      "/api/v1/research/jobs/" +
+      report.job_id +
+      "/artifact?format=" +
+      format,
+    { headers: { Authorization: "Bearer " + state.token } },
+  );
+  if (!response.ok) {
+    const e = await response.json();
+    throw Error(e.error?.message || "报告导出失败");
+  }
+  const blob = await response.blob(),
+    url = URL.createObjectURL(blob),
+    a = h("a", {
+      href: url,
+      download: "TradingAgents-" + report.job_id + "." + format,
+    });
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+function nativeResearch() {
+  const info = state.research,
+    settings = info.settings,
+    cap = info.capability;
+  const ready = info.authorized && cap.configured;
+  const rows = [
+    ["技术分析师", "market"],
+    ["情绪分析师", "social"],
+    ["新闻分析师", "news"],
+    ["基本面分析师", "fundamentals"],
+  ];
+  const providerSelect = (name, value, optional = false) => {
+    const el = h(
+      "select",
+      { name },
+      optional ? h("option", { value: "" }, "使用主供应商") : null,
+      info.providers.map((x) => h("option", { value: x }, x)),
+    );
+    el.value = value || "";
+    return el;
+  };
+  const settingForm = h("form", {
+    id: "native-settings",
+    onSubmit: async (e) => {
+      e.preventDefault();
+      const b = e.currentTarget.querySelector("button[type=submit]");
+      b.disabled = true;
+      try {
+        const f = new FormData(e.currentTarget),
+          out = { ...settings };
+        for (const key of [
+          "llm_provider",
+          "quick_think_llm",
+          "deep_think_llm",
+          "output_language",
+        ])
+          out[key] = f.get(key);
+        for (const key of ["quick_think_provider", "deep_think_provider"])
+          out[key] = f.get(key) || null;
+        for (const key of [
+          "max_debate_rounds",
+          "max_risk_discuss_rounds",
+          "holding_period_days",
+        ])
+          out[key] = Number(f.get(key));
+        out.checkpoint_enabled = f.has("checkpoint_enabled");
+        out.analysts = f.getAll("analysts");
+        const advanced = JSON.parse(f.get("advanced"));
+        const allowed = [
+          "max_tokens",
+          "temperature",
+          "llm_max_retries",
+          "max_tool_rounds",
+          "max_recur_limit",
+          "openai_reasoning_effort",
+          "anthropic_effort",
+          "google_thinking_level",
+          "data_vendors",
+          "tool_vendors",
+        ];
+        for (const [key, value] of Object.entries(advanced)) {
+          if (!allowed.includes(key)) throw Error("不允许的高级配置：" + key);
+          out[key] = value;
+        }
+        await api("/research/config", "PUT", out);
+        await refresh();
+        render();
+        toast("已保存原生引擎配置；未调用模型");
+      } catch (err) {
+        toast(err.message);
+      } finally {
+        b.disabled = false;
+      }
+    },
+  });
+  const analystChecks = h(
+    "div",
+    { class: "chips" },
+    rows.map(([label, key]) =>
+      h(
+        "label",
+        { class: "chip" },
+        h("input", {
+          type: "checkbox",
+          name: "analysts",
+          value: key,
+          checked: settings.analysts.includes(key),
+        }),
+        " " + label,
+      ),
+    ),
+  );
+  settingForm.append(
+    h(
+      "div",
+      { class: "form-grid" },
+      h(
+        "label",
+        { class: "field" },
+        "主模型供应商",
+        providerSelect("llm_provider", settings.llm_provider),
+      ),
+      field("输出语言", "text", "output_language", settings.output_language),
+      h(
+        "label",
+        { class: "field" },
+        "快速模型供应商",
+        providerSelect(
+          "quick_think_provider",
+          settings.quick_think_provider,
+          true,
+        ),
+      ),
+      field("快速模型ID", "text", "quick_think_llm", settings.quick_think_llm),
+      h(
+        "label",
+        { class: "field" },
+        "深度模型供应商",
+        providerSelect(
+          "deep_think_provider",
+          settings.deep_think_provider,
+          true,
+        ),
+      ),
+      field("深度模型ID", "text", "deep_think_llm", settings.deep_think_llm),
+      field(
+        "多空辩论轮数",
+        "number",
+        "max_debate_rounds",
+        settings.max_debate_rounds,
+        { min: 1, max: 5 },
+      ),
+      field(
+        "风险讨论轮数",
+        "number",
+        "max_risk_discuss_rounds",
+        settings.max_risk_discuss_rounds,
+        { min: 1, max: 5 },
+      ),
+      field(
+        "结果结算持有交易日",
+        "number",
+        "holding_period_days",
+        settings.holding_period_days,
+        { min: 1, max: 60 },
+      ),
+    ),
+    analystChecks,
+    h(
+      "label",
+      { class: "field" },
+      h(
+        "span",
+        {},
+        h("input", {
+          type: "checkbox",
+          name: "checkpoint_enabled",
+          checked: settings.checkpoint_enabled,
+        }),
+        " 保留原生检查点，供失败后手动恢复",
+      ),
+    ),
+    h(
+      "details",
+      { class: "secondary-import" },
+      h("summary", {}, "高级原生参数（可选）"),
+      h(
+        "label",
+        { class: "field" },
+        "模型预算、思考参数和原仓库数据商注册表",
+        h(
+          "textarea",
+          { name: "advanced", rows: 10 },
+          JSON.stringify(
+            Object.fromEntries(
+              [
+                "max_tokens",
+                "temperature",
+                "llm_max_retries",
+                "max_tool_rounds",
+                "max_recur_limit",
+                "openai_reasoning_effort",
+                "anthropic_effort",
+                "google_thinking_level",
+                "data_vendors",
+                "tool_vendors",
+              ].map((k) => [k, settings[k]]),
+            ),
+            null,
+            2,
+          ),
+        ),
+      ),
+    ),
+    h(
+      "button",
+      { type: "submit", class: "btn primary", disabled: !info.authorized },
+      "保存原生设置",
+    ),
+  );
+  const portfolio = h("textarea", {
+    name: "portfolio",
+    rows: 4,
+    placeholder:
+      '可选持仓JSON；留空表示未提供持仓，不会假定空仓。例如 {"cash":25000,"currency":"CNY","positions":[]}',
+  });
+  const day =
+    state.market.find((x) => x.symbol === state.selected)?.date ||
+    new Date().toISOString().slice(0, 10);
+  const analysis = h(
+    "form",
+    {
+      id: "native-analysis",
+      onSubmit: async (e) => {
+        e.preventDefault();
+        const b = e.currentTarget.querySelector("button[type=submit]");
+        b.disabled = true;
+        try {
+          const f = new FormData(e.currentTarget);
+          await api("/analysis-jobs", "POST", {
+            symbol: f.get("symbol"),
+            engine: "tradingagents",
+            analysis_date: f.get("analysis_date"),
+            portfolio: portfolio.value.trim()
+              ? JSON.parse(portfolio.value)
+              : null,
+            idempotency_key: crypto.randomUUID(),
+          });
+          await navigate("jobs");
+          toast("已提交原仓库完整多代理流程");
+        } catch (err) {
+          toast(err.message);
+        } finally {
+          b.disabled = false;
+        }
+      },
+    },
+    field(
+      "股票代码（标准后缀）",
+      "text",
+      "symbol",
+      state.selected || "000001.SZ",
+    ),
+    field("原生分析日期", "date", "analysis_date", day),
+    h(
+      "label",
+      { class: "field" },
+      "持仓上下文（可选，非券商自动同步）",
+      portfolio,
+    ),
+    button(
+      "载入模拟持仓（非真实账户）",
+      () => {
+        portfolio.value = JSON.stringify(
+          {
+            cash: state.account.available_cash / 100,
+            currency: "CNY",
+            positions: state.account.positions.map((x) => ({
+              ticker: x.symbol,
+              quantity: x.quantity,
+              average_price: null,
+            })),
+          },
+          null,
+          2,
+        );
+        analysis.querySelector("[name=analysis_date]").value =
+          state.account.as_of;
+      },
+      "small",
+    ),
+    h(
+      "p",
+      { class: "sub" },
+      "调用原仓库自己的行情、新闻、财务与情绪工具；不会用网页日线补写缺失证据。模型调用可能产生供应商费用。",
+    ),
+    h(
+      "button",
+      { type: "submit", class: "btn primary", disabled: !ready },
+      "启动原生完整分析",
+    ),
+  );
+  const batch = h(
+    "form",
+    {
+      id: "native-backtest",
+      onSubmit: async (e) => {
+        e.preventDefault();
+        try {
+          const f = Object.fromEntries(new FormData(e.currentTarget));
+          await api("/research/backtests", "POST", {
+            tickers: f.tickers.split(/[,，\s]+/).filter(Boolean),
+            start: f.start,
+            end: f.end,
+            every_n_days: Number(f.every_n_days),
+            idempotency_key: crypto.randomUUID(),
+          });
+          await navigate("jobs");
+        } catch (err) {
+          toast(err.message);
+        }
+      },
+    },
+    field(
+      "证券代码，逗号分隔",
+      "text",
+      "tickers",
+      state.selected || "000001.SZ",
+    ),
+    h(
+      "div",
+      { class: "form-grid" },
+      field("开始日期", "date", "start", day),
+      field("结束日期", "date", "end", day),
+    ),
+    field("日期网格间隔（自然日）", "number", "every_n_days", 7, {
+      min: 1,
+      max: 60,
+    }),
+    h(
+      "p",
+      { class: "sub" },
+      "原仓库评级回测：单批最多16个证券×日期单元，按单元预留额度；不是模拟资金收益曲线。",
+    ),
+    h(
+      "button",
+      { class: "btn primary", type: "submit", disabled: !ready },
+      "运行原生评级回测",
+    ),
+  );
+  const tiers = cap.tiers.map((x) =>
+    h(
+      "div",
+      { class: "row" },
+      h(
+        "div",
+        {},
+        h("strong", {}, x.tier === "quick" ? "快速模型" : "深度模型"),
+        h("p", {}, x.provider + " / " + x.model),
+        h("p", {}, x.env_name || "本地模型/供应商原生认证"),
+      ),
+      badge(
+        x.configured ? "已配置 · 未联调" : "缺少凭据",
+        x.configured ? "muted" : "warn",
+      ),
+    ),
+  );
+  return [
+    heading(
+      "原生 TradingAgents 研究",
+      "直接使用你提供的GitHub仓库：四类分析师 → 多空辩论 → 研究经理 → 交易员 → 三方风控 → 组合经理。",
+    ),
+    h(
+      "div",
+      { class: "banner " + (!ready ? "warn" : "") },
+      !info.authorized
+        ? "当前账户尚未获准内部原生研究。安装研究依赖、配置服务端模型凭据和内部测试邮箱后开放；不会切换成简化分析。"
+        : !cap.dependencies_ready
+          ? "原生依赖缺失：" + cap.missing_dependencies.join(", ")
+          : !cap.configured
+            ? "尚缺模型凭据。请在服务端环境配置右侧列出的密钥；当前没有执行真实模型验证。"
+            : "原生引擎配置已就绪；这不代表模型接口已联调。点击分析后才发起调用。",
+    ),
+    card(
+      "上游核心保真检查",
+      h(
+        "div",
+        {},
+        badge(
+          info.source_integrity.unchanged
+            ? "原始核心代码一致"
+            : "核心代码存在变更",
+          info.source_integrity.unchanged ? "" : "warn",
+        ),
+        h(
+          "p",
+          { class: "sub" },
+          "源版本 " +
+            info.source_integrity.upstream_version +
+            " · 校验 " +
+            info.source_integrity.checked_files +
+            " 个源码文件。记忆按用户持久隔离，检查点按任务保存，成功报告复用不重复调用。",
+        ),
+      ),
+    ),
+    h(
+      "div",
+      { class: "grid" },
+      card("原生引擎设置", settingForm),
+      card(
+        "供应商与依赖状态",
+        h(
+          "div",
+          {},
+          tiers,
+          h(
+            "p",
+            { class: "sub" },
+            "凭据只从服务端环境读取，网页不会获取或保存供应商密钥。",
+          ),
+        ),
+      ),
+    ),
+    h(
+      "div",
+      { class: "grid" },
+      card("完整多代理分析", analysis),
+      card("原生回测网格", batch),
+    ),
+    card(
+      "历史决策、反思与结算",
+      h(
+        "div",
+        {},
+        h(
+          "div",
+          { class: "actions" },
+          button(
+            "读取我的原生记忆",
+            async () => {
+              const data = await api("/research/memory");
+              state.memory = data.items;
+              render();
+            },
+            "small",
+          ),
+          ready
+            ? button(
+                "结算到期决策并生成反思",
+                async () => {
+                  await api("/research/settlement", "POST", {
+                    idempotency_key: crypto.randomUUID(),
+                  });
+                  await navigate("jobs");
+                },
+                "small",
+              )
+            : null,
+        ),
+        state.memory.length
+          ? table(
+              ["证券", "日期", "评级", "状态", "反思"],
+              state.memory.map((x) =>
+                h(
+                  "tr",
+                  {},
+                  h("td", {}, x.ticker),
+                  h("td", {}, x.date),
+                  h("td", {}, x.rating),
+                  h("td", {}, x.pending ? "待结算" : "已结算"),
+                  h("td", {}, x.reflection || "—"),
+                ),
+              ),
+            )
+          : empty(
+              "尚未读取原生记忆",
+              "成功的原生分析会写入原仓库记忆日志，待持有窗口结束后结算与反思。",
+            ),
+      ),
+    ),
+  ];
+}
 function settings() {
   return [
     heading("连接与设置", "将可用能力与尚未配置的服务明确分开。"),
@@ -1600,7 +2172,7 @@ function settings() {
           h(
             "p",
             { class: "sub" },
-            "当前版本 v0.2.0 · 单主机试运行架构。会话有效期8小时，退出后服务端撤销当前会话。邮箱验证、密码找回、多端会话管理和运维后台尚未实现。",
+            "当前版本 v0.3.0 · 单主机试运行架构。会话有效期8小时，退出后服务端撤销当前会话。邮箱验证、密码找回、多端会话管理和运维后台尚未实现。",
           ),
           h(
             "div",
@@ -1629,6 +2201,7 @@ function render() {
     return;
   }
   const pages = {
+    research: nativeResearch,
     dashboard,
     watchlist,
     jobs,

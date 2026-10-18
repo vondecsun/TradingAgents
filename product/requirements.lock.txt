@@ -13,3 +13,4 @@ click==8.5.0
 h11==0.16.0
 annotated-doc==0.0.5
 tzdata==2026.5
+python-dotenv==1.2.4

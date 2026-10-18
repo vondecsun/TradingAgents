@@ -355,3 +355,51 @@ def test_schema_upgrade_keeps_existing_paper_account(client):
     db.init()
     assert get(client,'/paper/account',h).json()==before
     assert len(get(client,'/paper/history',h).json()['orders'])==1
+
+
+def test_native_settings_snapshot_portfolio_and_resume_api(client,monkeypatch):
+    from product.server import native
+    h=signup(client)
+    monkeypatch.setenv('PRODUCT_INTERNAL_RESEARCH','true')
+    monkeypatch.setenv('PRODUCT_INTERNAL_EMAILS','tester@example.com')
+    monkeypatch.setattr(native,'require_ready',lambda settings:None)
+    config=get(client,'/research/config',h).json()
+    assert config['authorized'] and config['source_integrity']['unchanged']
+    settings=config['settings'];settings['max_debate_rounds']=2
+    assert client.put('/api/v1/research/config',headers=h,json=settings).status_code==200
+    request={'symbol':'000001.SZ','engine':'tradingagents','analysis_date':'2026-01-09','portfolio':{'cash':1000,'currency':'CNY','positions':[]},'idempotency_key':'native-api-snapshot'}
+    r=post(client,'/analysis-jobs',h,request)
+    assert r.status_code==202,r.text
+    jid=r.json()['id']
+    with db.transaction() as con:
+        stored=json.loads(con.execute('SELECT input FROM jobs WHERE id=?',(jid,)).fetchone()[0])
+        con.execute("UPDATE jobs SET status='failed',cost=0 WHERE id=?",(jid,))
+    assert stored['research_settings']['max_debate_rounds']==2
+    assert stored['as_of']=='2026-01-09' and stored['portfolio']['positions']==[]
+    assert stored['_job_id']==jid
+    assert post(client,'/analysis-jobs',h,{**request,'analysis_date':'2026-01-08'}).status_code==409
+    assert post(client,'/research/jobs/'+jid+'/resume',h).status_code==202
+    assert get(client,'/subscription',h).json()['current']['used']==1
+    other=signup(client,'native-other@example.com')
+    monkeypatch.setenv('PRODUCT_INTERNAL_EMAILS','tester@example.com,native-other@example.com')
+    assert post(client,'/research/jobs/'+jid+'/resume',other).status_code==404
+    assert get(client,'/research/jobs/'+jid+'/artifact?format=html',other).status_code==404
+
+
+def test_native_batch_costs_permissions_and_missing_credentials(client,monkeypatch):
+    from product.server import native
+    h=signup(client)
+    payload={'tickers':['000001.SZ'],'start':'2026-01-02','end':'2026-01-05','every_n_days':1,'idempotency_key':'native-batch-api'}
+    assert post(client,'/research/backtests',h,payload).status_code==403
+    monkeypatch.setenv('PRODUCT_INTERNAL_RESEARCH','true')
+    monkeypatch.setenv('PRODUCT_INTERNAL_EMAILS','tester@example.com')
+    monkeypatch.delenv('OPENAI_API_KEY',raising=False)
+    assert post(client,'/analysis-jobs',h,{'symbol':'000001.SZ','engine':'tradingagents','idempotency_key':'missing-credentials'}).status_code==400
+    assert get(client,'/analysis-jobs',h).json()['items']==[]
+    monkeypatch.setattr(native,'require_ready',lambda settings:None)
+    r=post(client,'/research/backtests',h,payload)
+    assert r.status_code==202,r.text
+    assert get(client,'/subscription',h).json()['current']['used']==4
+    assert post(client,'/research/backtests',h,payload).json()['id']==r.json()['id']
+    assert post(client,'/research/backtests',h,{**payload,'idempotency_key':'large-batch','end':'2026-02-28'}).status_code==400
+    assert post(client,'/research/settlement',h,{'idempotency_key':'settlement-api'}).status_code==202
