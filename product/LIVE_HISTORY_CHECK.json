@@ -1,0 +1,13 @@
+{
+  "checked_at": "2026-10-18T01:01:30.380897+00:00",
+  "symbol": "000001.SZ",
+  "requested_start": "2025-01-02",
+  "requested_end": "2025-01-10",
+  "rows": 7,
+  "first": "2025-01-02",
+  "last": "2025-01-10",
+  "source": "Yahoo Finance · 历史日线报价 · 非实时",
+  "report_completed": true,
+  "simulation_unchanged": true,
+  "realtime": false
+}

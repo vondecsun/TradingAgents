@@ -8,6 +8,7 @@ services:
     environment:
       PRODUCT_TEST_BILLING: "false"
       PRODUCT_INTERNAL_RESEARCH: "false"
+      PRODUCT_PUBLIC_HISTORY: "${PRODUCT_PUBLIC_HISTORY:-disabled}"
       PRODUCT_CORS_ORIGINS: "${PRODUCT_CORS_ORIGINS:-}"
     volumes:
       - product-data:/data

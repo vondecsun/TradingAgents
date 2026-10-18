@@ -231,3 +231,127 @@ def test_password_not_stored_raw_and_untrusted_source_is_data(client):
     assert get(client,'/paper/history',h).json()['ledger'][0]['date']=='2025-01-02'
     response=client.get('/')
     assert "script-src 'self'" in response.headers['Content-Security-Policy']
+
+
+def chart_fixture(symbol='000001.SZ'):
+    return {'chart':{'error':None,'result':[{'meta':{'symbol':symbol.replace('.SH','.SS'),'currency':'CNY','shortName':'Fixture bank'},'timestamp':[1735781400,1735867800],'indicators':{'quote':[{'open':[10,10.1],'high':[10.2,10.3],'low':[9.9,10],'close':[10.1,10.2],'volume':[100000,120000]}]}}]}}
+
+
+def mock_history(monkeypatch):
+    from product.server import market
+    calls=[]
+    def fetch(symbol,start,end):
+        calls.append(symbol)
+        return market.parse_chart(chart_fixture(symbol),symbol,start,end)
+    monkeypatch.setattr(market,'fetch_daily',fetch)
+    return calls
+
+
+def test_one_click_history_cache_and_no_paper_mutation(client,monkeypatch):
+    h=signup(client)
+    calls=mock_history(monkeypatch)
+    before=get(client,'/paper/account',h).json()
+    request={'symbol':'000001','start':'2025-01-02','end':'2025-01-03'}
+    r=post(client,'/data/fetch',h,request)
+    assert r.status_code==200,r.text
+    assert r.json()['downloaded']==2 and r.json()['symbol']=='000001.SZ'
+    assert get(client,'/paper/account',h).json()==before
+    quotes=get(client,'/instruments',h).json()
+    assert quotes['scope']=='online' and quotes['items'][0]['mode']=='online'
+    assert quotes['items'][0]['watched']
+    assert len(get(client,'/instruments/000001.SZ/bars',h).json()['items'])==2
+    assert get(client,'/instruments?scope=paper',h).json()['items']==[]
+    assert post(client,'/data/fetch',h,request).json()['cached']
+    assert len(calls)==1
+    job=post(client,'/analysis-jobs',h,{'symbol':'000001.SZ','idempotency_key':'online-snapshot'}).json()['id']
+    with db.transaction() as con:
+        snapshot=json.loads(con.execute('SELECT input FROM jobs WHERE id=?',(job,)).fetchone()[0])
+    assert snapshot['as_of']=='2025-01-03' and len(snapshot['bars'])==2
+    assert all(x['mode']=='online' for x in snapshot['bars'])
+
+
+def test_history_does_not_destroy_demo_and_can_start_paper(client,monkeypatch):
+    h=signup(client)
+    mock_history(monkeypatch)
+    post(client,'/data/demo',h)
+    buy(client,h)
+    before=get(client,'/paper/account',h).json()
+    payload={'symbol':'000001','start':'2025-01-02','end':'2025-01-03'}
+    assert post(client,'/data/fetch',h,payload).status_code==200
+    assert get(client,'/paper/account',h).json()==before
+    assert get(client,'/instruments',h).json()['scope']=='online'
+    assert get(client,'/instruments?scope=paper',h).json()['items'][0]['mode']=='demo'
+    assert post(client,'/data/use-for-paper',h,{'symbol':'000001'}).status_code==409
+    post(client,'/paper/reset',h,{'confirmation':'RESET SIMULATION'})
+    assert get(client,'/instruments',h).json()['items'][0]['mode']=='online'
+    assert post(client,'/data/use-for-paper',h,{'symbol':'000001'}).status_code==200
+    assert get(client,'/paper/account',h).json()['as_of']=='2025-01-02'
+    assert len(get(client,'/instruments/000001.SZ/bars?scope=paper',h).json()['items'])==1
+    assert buy(client,h).status_code==200
+    assert post(client,'/paper/advance',h).status_code==200
+    assert len(get(client,'/paper/history',h).json()['fills'])==1
+
+
+def test_history_failure_and_validation_preserve_workspace(client,monkeypatch):
+    from product.server import market
+    h=signup(client)
+    post(client,'/data/demo',h)
+    before=get(client,'/instruments',h).json()
+    def fail(*args):raise market.MarketError('provider_timeout','行情下载超时，请检查网络后重试')
+    monkeypatch.setattr(market,'fetch_daily',fail)
+    request={'symbol':'000001','start':'2025-01-02','end':'2025-01-03'}
+    r=post(client,'/data/fetch',h,request)
+    assert r.status_code==502 and r.json()['error']['code']=='provider_timeout'
+    assert get(client,'/instruments',h).json()==before
+    assert post(client,'/data/fetch',h,{**request,'symbol':'http://x'}).status_code==400
+    assert post(client,'/data/fetch',h,{**request,'end':'2099-01-01'}).status_code==400
+    assert post(client,'/data/fetch',h,{**request,'start':'2025-01-04'}).status_code==400
+    assert post(client,'/data/fetch',h,{**request,'start':'bad'}).status_code==422
+
+
+def test_history_cross_account_isolation(client,monkeypatch):
+    a=signup(client);b=signup(client,'private-history@example.com')
+    mock_history(monkeypatch)
+    assert post(client,'/data/fetch',a,{'symbol':'600519','start':'2025-01-02','end':'2025-01-03'}).status_code==200
+    assert get(client,'/instruments',b).json()['items']==[]
+    assert get(client,'/instruments/600519.SH/bars',b).json()['items']==[]
+    assert post(client,'/data/use-for-paper',b,{'symbol':'600519'}).status_code==400
+
+
+def test_chart_adapter_validation_and_fixed_destination(monkeypatch):
+    from datetime import date
+    from product.server import market
+    result=market.parse_chart(chart_fixture(),'000001.SZ',date(2025,1,2),date(2025,1,3))
+    assert len(result['items'])==2 and result['items'][0]['close']=='10.1000'
+    bad=chart_fixture('600519.SH')
+    with pytest.raises(market.MarketError):
+        market.parse_chart(bad,'000001.SZ',date(2025,1,2),date(2025,1,3))
+    bad=chart_fixture();bad['chart']['result'][0]['indicators']['quote'][0]['high'][0]=1
+    with pytest.raises(market.MarketError):
+        market.parse_chart(bad,'000001.SZ',date(2025,1,2),date(2025,1,3))
+    bad=chart_fixture();bad['chart']['result'][0]['indicators']['quote'][0]['close'].pop()
+    with pytest.raises(market.MarketError):
+        market.parse_chart(bad,'000001.SZ',date(2025,1,2),date(2025,1,3))
+    urls=[]
+    class Response:
+        def __enter__(self):return self
+        def __exit__(self,*args):return False
+        def read(self,*args):return json.dumps(chart_fixture('600519.SH')).encode()
+    def opener(request,timeout):
+        urls.append(request.full_url);assert timeout==12;return Response()
+    monkeypatch.setattr(market,'urlopen',opener)
+    assert market.fetch_daily('600519.SH',date(2025,1,2),date(2025,1,3))['items']
+    assert urls[0].startswith('https://query1.finance.yahoo.com/v8/finance/chart/600519.SS?')
+
+
+def test_schema_upgrade_keeps_existing_paper_account(client):
+    h=signup(client)
+    post(client,'/data/demo',h)
+    buy(client,h)
+    before=get(client,'/paper/account',h).json()
+    with db.transaction() as con:
+        con.execute('DROP TABLE market_bars')
+        con.execute('DROP TABLE market_fetches')
+    db.init()
+    assert get(client,'/paper/account',h).json()==before
+    assert len(get(client,'/paper/history',h).json()['orders'])==1

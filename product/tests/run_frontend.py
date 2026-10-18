@@ -13,7 +13,7 @@ def main():
     os.chdir(ROOT)
     with tempfile.TemporaryDirectory() as folder:
         env={**os.environ,'PRODUCT_DB':folder+'/db.sqlite3','PRODUCT_TEST_BILLING':'true','PRODUCT_OPEN_BROWSER':'false','PRODUCT_HOST':'127.0.0.1','PRODUCT_PORT':'18765','PRODUCT_TEST_URL':'http://127.0.0.1:18765'}
-        server=subprocess.Popen([sys.executable,'product/launch.py'],env=env)
+        server=subprocess.Popen([sys.executable,'-m','uvicorn','product.tests.fixture_server:app','--host','127.0.0.1','--port','18765','--no-access-log'],env=env)
         try:
             ready=False
             for _ in range(100):

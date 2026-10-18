@@ -1,4 +1,4 @@
-# Tested Python 3.12 environment, 2026-10-17. Revalidate before upgrades.
+# Tested Python 3.12 environment, 2026-10-18. Revalidate before upgrades.
 fastapi==0.143.3
 uvicorn==0.54.0
 starlette==1.8.0
@@ -12,3 +12,4 @@ idna==3.19
 click==8.5.0
 h11==0.16.0
 annotated-doc==0.0.5
+tzdata==2026.5

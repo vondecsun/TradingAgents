@@ -45,7 +45,10 @@ async function main() {
     .querySelector("form")
     .dispatchEvent(new w.Event("submit", { bubbles: true, cancelable: true }));
   await wait(() => text().includes("模拟总资产"), "registration and dashboard");
-  click("载入演示数据");
+  click("数据中心");
+  await wait(() => text().includes("一键获取历史行情"), "data center");
+  w.document.querySelector("details").open = true;
+  click("载入合成演示数据");
   await wait(() => text().includes("合成演示"), "demo workspace");
   click("自选行情");
   await wait(() => text().includes("证券列表"), "market navigation");
@@ -80,10 +83,67 @@ async function main() {
   click("数据中心");
   await wait(() => text().includes("验证并导入"), "data import page");
   assert(!w.document.querySelector('script[src*="http"]'));
+  assert.equal(
+    w.document.querySelector("details").open,
+    false,
+    "CSV import should be folded by default",
+  );
+  const token = w.sessionStorage.getItem("hy_token");
+  const auth = { headers: { Authorization: "Bearer " + token } };
+  const paperBefore = await (
+    await fetch(base + "/api/v1/paper/account", auth)
+  ).json();
+  const online = w.document.querySelector("#online-history-form");
+  online.querySelector("[name=symbol]").value = "000001";
+  online.querySelector("[name=start]").value = "2025-01-02";
+  online.querySelector("[name=end]").value = "2025-01-03";
+  online.dispatchEvent(
+    new w.Event("submit", { bubbles: true, cancelable: true }),
+  );
+  await wait(
+    () => text().includes("证券列表") && text().includes("在线日线"),
+    "one-click history saves and opens market",
+  );
+  assert(w.document.querySelector("svg") || text().includes("在线日线"));
+  const paperAfter = await (
+    await fetch(base + "/api/v1/paper/account", auth)
+  ).json();
+  assert.deepEqual(
+    paperAfter,
+    paperBefore,
+    "history download must preserve paper ledger and clock",
+  );
+  click("研究");
+  await wait(() => text().includes("全部任务"), "online research");
+  await wait(
+    () => w.document.querySelector("tbody tr")?.textContent.includes("已完成"),
+    "online report completion",
+  );
+  await wait(
+    () => w.document.querySelectorAll("button").length > 0,
+    "report action",
+  );
+  click("阅读报告");
+  await wait(() => text().includes("在线获取日线"), "online research snapshot");
+  click("数据中心");
+  await wait(
+    () => w.document.querySelector("#online-history-form"),
+    "online form returns",
+  );
+  const failed = w.document.querySelector("#online-history-form");
+  failed.querySelector("[name=symbol]").value = "600036";
+  failed.dispatchEvent(
+    new w.Event("submit", { bubbles: true, cancelable: true }),
+  );
+  await wait(
+    () => text().includes("测试网络超时"),
+    "provider failure is visible",
+  );
+  assert(w.document.querySelector("#online-history-form button[type=submit]"));
   click("退出");
   await wait(() => text().includes("欢迎回来"), "logout");
   console.log(
-    "PASS: registration, demo, search, durable analysis, report, order/fill, test subscription, settings, data and logout DOM flows",
+    "PASS: registration, demo, search, durable analysis, order/fill, subscription, one-click history, online report, source errors, ledger isolation and logout DOM flows",
   );
 }
 main()

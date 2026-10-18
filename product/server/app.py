@@ -23,7 +23,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field, StrictInt
 
-from . import db, paper, worker
+from . import db, paper, worker, market
 
 PREFIX = '/api/v1'
 PLANS = {'free': {'quota': 5, 'price': 0}, 'research': {'quota': 100, 'price': 9900}, 'pro': {'quota': 500, 'price': 19900}}
@@ -98,7 +98,7 @@ async def lifespan(app):
         thread.join(timeout=5)
 
 
-app = FastAPI(title='衡研 · A股研究工作台', version='0.1.0', lifespan=lifespan)
+app = FastAPI(title='衡研 · A股研究工作台', version='0.2.0', lifespan=lifespan)
 origins = [x.strip() for x in os.getenv('PRODUCT_CORS_ORIGINS', '').split(',') if x.strip()]
 if origins:
     app.add_middleware(CORSMiddleware, allow_origins=origins, allow_methods=['GET','POST','DELETE'], allow_headers=['Authorization','Content-Type'])
@@ -208,29 +208,39 @@ def logout(u=Depends(user), authorization: str=Header(default='')):
 def health():
     with db.transaction() as con:
         con.execute('SELECT 1')
-    return {'status':'ok','version':'0.1.0','live_trading':False}
+    return {'status':'ok','version':'0.2.0','live_trading':False}
 
 
 @app.get(PREFIX+'/me')
 def me(u=Depends(user)):
     with db.transaction() as con:
-        return {'email':u['email'],'subscription':subscription(con,u['id']), 'internal_research':internal(u['email']), 'test_billing':test_billing(), 'live_trading':False, 'broker':{'name':'国金证券','status':'not_configured','reason':'官方接口、账户权限及商业授权尚未核实'}, 'data_provider':'用户CSV/明确标识的演示数据；无实时行情连接'}
+        return {'email':u['email'],'subscription':subscription(con,u['id']), 'internal_research':internal(u['email']), 'test_billing':test_billing(), 'live_trading':False, 'broker':{'name':'国金证券','status':'not_configured','reason':'官方接口、账户权限及商业授权尚未核实'}, 'data_provider':'Yahoo Finance历史日线 / 用户CSV / 合成演示；无实时行情连接'}
 
 
 @app.get(PREFIX+'/instruments')
-def instruments(u=Depends(user)):
+def instruments(scope: Literal['research','paper']='research',u=Depends(user)):
     with db.transaction() as con:
         day = con.execute('SELECT as_of FROM accounts WHERE user_id=?',(u['id'],)).fetchone()[0]
-        rows = con.execute('SELECT b.* FROM bars b JOIN (SELECT symbol,MAX(date) day FROM bars WHERE user_id=? AND date<=? GROUP BY symbol) x ON b.symbol=x.symbol AND b.date=x.day WHERE b.user_id=? ORDER BY b.symbol',(u['id'],day,u['id'])).fetchall()
+        online = scope == 'research' and con.execute('SELECT 1 FROM market_bars WHERE user_id=?',(u['id'],)).fetchone()
+        if online:
+            rows = con.execute('SELECT b.* FROM market_bars b JOIN (SELECT symbol,MAX(date) day FROM market_bars WHERE user_id=? GROUP BY symbol) x ON b.symbol=x.symbol AND b.date=x.day WHERE b.user_id=? ORDER BY b.symbol',(u['id'],u['id'])).fetchall()
+        else:
+            rows = con.execute('SELECT b.* FROM bars b JOIN (SELECT symbol,MAX(date) day FROM bars WHERE user_id=? AND date<=? GROUP BY symbol) x ON b.symbol=x.symbol AND b.date=x.day WHERE b.user_id=? ORDER BY b.symbol',(u['id'],day,u['id'])).fetchall()
         watches = {r[0] for r in con.execute('SELECT symbol FROM watchlist WHERE user_id=?',(u['id'],))}
-        return {'as_of':day,'items':[{**dict(r),'watched':r['symbol'] in watches} for r in rows]}
+        return {'as_of':None if online else day,'scope':'online' if online else 'paper','items':[{**dict(r),'watched':r['symbol'] in watches} for r in rows]}
 
 
 @app.get(PREFIX+'/instruments/{symbol}/bars')
-def bars(symbol: str,u=Depends(user)):
+def bars(symbol: str,scope: Literal['research','paper']='research',u=Depends(user)):
     with db.transaction() as con:
         as_of = con.execute('SELECT as_of FROM accounts WHERE user_id=?',(u['id'],)).fetchone()[0]
-        return {'items':[dict(r) for r in con.execute('SELECT * FROM bars WHERE user_id=? AND symbol=? AND date<=? ORDER BY date DESC LIMIT 250',(u['id'],symbol,as_of))][::-1], 'as_of':as_of}
+        online = scope == 'research' and con.execute('SELECT 1 FROM market_bars WHERE user_id=? AND symbol=?',(u['id'],symbol)).fetchone()
+        if online:
+            rows = con.execute('SELECT * FROM market_bars WHERE user_id=? AND symbol=? ORDER BY date DESC LIMIT 2000',(u['id'],symbol)).fetchall()
+            as_of = rows[0]['date'] if rows else None
+        else:
+            rows = con.execute('SELECT * FROM bars WHERE user_id=? AND symbol=? AND date<=? ORDER BY date DESC LIMIT 250',(u['id'],symbol,as_of)).fetchall()
+        return {'items':[dict(r) for r in rows][::-1], 'as_of':as_of,'scope':'online' if online else 'paper'}
 
 
 @app.post(PREFIX+'/watchlist/{symbol}')
@@ -247,6 +257,67 @@ def unwatch(symbol: str,u=Depends(user)):
     with db.transaction() as con:
         con.execute('DELETE FROM watchlist WHERE user_id=? AND symbol=?',(u['id'],symbol))
     return {'ok':True}
+
+
+class FetchData(Model):
+    symbol: str = Field(min_length=6,max_length=12)
+    start: date
+    end: date
+
+
+@app.post(PREFIX+'/data/fetch')
+def fetch_data(data: FetchData,u=Depends(user)):
+    if os.getenv('PRODUCT_PUBLIC_HISTORY','personal') != 'personal':
+        error('history_disabled','此部署未开放公共历史数据源，请由运营方配置有授权的行情服务',503)
+    symbol = market.normalize_symbol(data.symbol)
+    market.date_range(data.start,data.end)
+    with RATE_LOCK:
+        q = RATE['history:'+u['id']]
+        while q and q[0] < time.monotonic()-60:
+            q.popleft()
+        if len(q) >= 6:
+            error('download_rate_limit','操作过于频繁，请一分钟后再试',429)
+        q.append(time.monotonic())
+    start,end = data.start.isoformat(),data.end.isoformat()
+    with db.transaction() as con:
+        cached=con.execute('SELECT * FROM market_fetches WHERE user_id=? AND symbol=? AND start=? AND end=?',(u['id'],symbol,start,end)).fetchone()
+        if cached and cached['fetched'] > epoch()-600:
+            rows=con.execute('SELECT date FROM market_bars WHERE user_id=? AND symbol=? AND date BETWEEN ? AND ? ORDER BY date',(u['id'],symbol,start,end)).fetchall()
+            if rows:
+                return {'symbol':symbol,'downloaded':len(rows),'cached':True,'first':rows[0]['date'],'last':rows[-1]['date'],'source':market.SOURCE,'name':cached['name'],'fetched_at':cached['fetched']}
+    try:
+        result=market.fetch_daily(symbol,data.start,data.end)
+    except market.MarketError as exc:
+        error(exc.code,str(exc),502)
+    items=result['items']
+    with db.transaction() as con:
+        # This online workspace is separate from immutable paper-trading bars.
+        con.execute('DELETE FROM market_bars WHERE user_id=? AND symbol=? AND date BETWEEN ? AND ?',(u['id'],symbol,start,end))
+        con.executemany('INSERT INTO market_bars VALUES(?,?,?,?,?,?,?,?,?,?,?)',[(u['id'],symbol,r['date'],r['open'],r['high'],r['low'],r['close'],r['volume'],r['source'],'online',r['tradable']) for r in items])
+        con.execute('INSERT OR REPLACE INTO market_fetches VALUES(?,?,?,?,?,?)',(u['id'],symbol,start,end,epoch(),result['name']))
+        con.execute('INSERT OR IGNORE INTO watchlist VALUES(?,?)',(u['id'],symbol))
+        audit(con,u['id'],'history_download',symbol+' '+start+' '+end+' '+str(len(items)))
+    return {'symbol':symbol,'downloaded':len(items),'cached':False,'first':items[0]['date'],'last':items[-1]['date'],'source':result['source'],'name':result['name'],'skipped':result['skipped'],'fetched_at':epoch()}
+
+
+class PaperData(Model):
+    symbol: str = Field(min_length=6,max_length=12)
+
+
+@app.post(PREFIX+'/data/use-for-paper')
+def use_for_paper(data: PaperData,u=Depends(user)):
+    symbol=market.normalize_symbol(data.symbol)
+    with db.transaction() as con:
+        rows=con.execute('SELECT * FROM market_bars WHERE user_id=? AND symbol=? ORDER BY date',(u['id'],symbol)).fetchall()
+        if not rows:
+            error('no_history','请先获取此证券的行情')
+        if con.execute('SELECT 1 FROM bars WHERE user_id=?',(u['id'],)).fetchone():
+            error('paper_not_empty','已有模拟工作区；如需替换，请在模拟区显式重置，下载不会清除你的模拟记录',409)
+        con.executemany('INSERT INTO bars VALUES(?,?,?,?,?,?,?,?,?,?,?)',[tuple(r) for r in rows])
+        con.execute('UPDATE accounts SET as_of=? WHERE user_id=?',(rows[0]['date'],u['id']))
+        con.execute("UPDATE ledger SET date=? WHERE user_id=? AND kind='initial'",(rows[0]['date'],u['id']))
+        audit(con,u['id'],'history_to_paper',symbol)
+    return {'ok':True,'symbol':symbol,'rows':len(rows),'as_of':rows[0]['date']}
 
 
 class ImportData(Model):
@@ -407,9 +478,14 @@ def create_job(data: Job,u=Depends(user)):
         if con.execute("SELECT COUNT(*) FROM jobs WHERE user_id=? AND status IN ('queued','running')",(u['id'],)).fetchone()[0] >= 2:
             error('queue_limit','最多同时保留两个未完成任务',429)
         as_of = con.execute('SELECT as_of FROM accounts WHERE user_id=?',(u['id'],)).fetchone()[0]
-        rows = [dict(r) for r in con.execute('SELECT * FROM bars WHERE user_id=? AND symbol=? AND date<=? ORDER BY date DESC LIMIT 250',(u['id'],data.symbol,as_of))][::-1]
+        online = con.execute('SELECT MAX(date) FROM market_bars WHERE user_id=? AND symbol=?',(u['id'],data.symbol)).fetchone()[0]
+        if online:
+            as_of = online
+            rows = [dict(r) for r in con.execute('SELECT * FROM market_bars WHERE user_id=? AND symbol=? ORDER BY date DESC LIMIT 250',(u['id'],data.symbol))][::-1]
+        else:
+            rows = [dict(r) for r in con.execute('SELECT * FROM bars WHERE user_id=? AND symbol=? AND date<=? ORDER BY date DESC LIMIT 250',(u['id'],data.symbol,as_of))][::-1]
         if not rows:
-            error('no_data','请先载入演示或导入此证券的数据')
+            error('no_data','请先一键获取此证券的日线行情')
         if data.engine == 'tradingagents' and rows[-1]['mode'] == 'demo':
             error('demo_research','演示数据不可用于真实多代理研究')
         for row in rows:

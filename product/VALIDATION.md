@@ -35,3 +35,18 @@ it did not fail tests. Revalidate framework updates before production use.
 
 Do not use these tests as evidence of profitability, market-data accuracy,
 regulatory approval or readiness to accept real customer payments.
+
+## v0.2 — 2026-10-18
+
+- 17 backend tests pass, including the original 11 and new download/cache,
+  validation/failure atomicity, tenant isolation, research/paper separation,
+  adapter response validation and non-destructive schema upgrade checks.
+- DOM flow test now includes the one-click button, automatic market navigation,
+  online research report, folded CSV import, provider timeout feedback and
+  unchanged existing paper ledger. Its provider fixture exists only in tests.
+- Actual public provider + API + background report integration passed:
+  000001.SZ, 2025-01-02 through 2025-01-10, 7 daily bars. See LIVE_HISTORY_CHECK.json.
+- TickFlow was evaluated but returned HTTP403 in this environment; it is not
+  enabled as a hidden fallback. Only the explicitly identified Yahoo source is used.
+- Windows native runtime, graphical layout and the user's running local process
+  have not been updated or verified automatically.

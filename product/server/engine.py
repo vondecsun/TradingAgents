@@ -18,7 +18,7 @@ def run(data):
         'sections': [
             {'title': '可核查事实', 'text': f"数据截至 {last['date']}；收盘 {last['close']} 元；成交量 {last['volume']}；已提供 {len(bars)} 根日线。"},
             {'title': '计算指标', 'text': f'最近至多5条有效收盘记录均值 {average} 元。该指标不是买卖建议。'},
-            {'title': '数据局限', 'text': '演示数据或用户导入数据未经行情供应商验证。未接入公告、财务和实时行情；不推断其内容。历史模型可能存在知识泄漏。'},
+            {'title': '数据局限', 'text': '演示数据为合成；用户导入或在线历史日线未经交易所逐条核验。未接入公告、财务和实时行情；不推断其内容。历史模型可能存在知识泄漏。'},
         ],
         'evidence': [{'symbol': b['symbol'], 'date': b['date'], 'close': b['close'], 'source': b['source']} for b in bars[-20:]],
         'internal_only': data['engine'] == 'tradingagents',

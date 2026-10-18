@@ -6,6 +6,7 @@ const state = {
   view: "dashboard",
   me: null,
   market: [],
+  paperMarket: [],
   account: null,
   jobs: [],
   history: { orders: [], fills: [], ledger: [] },
@@ -176,21 +177,27 @@ function download(name, text, type = "text/plain;charset=utf-8") {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 async function refresh() {
-  const [me, market, account, jobs, history] = await Promise.all([
+  const [me, market, account, jobs, history, paperMarket] = await Promise.all([
     api("/me"),
     api("/instruments"),
     api("/paper/account"),
     api("/analysis-jobs"),
     api("/paper/history"),
+    api("/instruments?scope=paper"),
   ]);
   Object.assign(state, {
     me,
     market: market.items,
+    paperMarket: paperMarket.items,
     account,
     jobs: jobs.items,
     history,
   });
-  if (!state.selected && state.market.length)
+  if (
+    (!state.selected ||
+      !state.market.some((x) => x.symbol === state.selected)) &&
+    state.market.length
+  )
     state.selected = state.market[0].symbol;
   if (state.selected)
     state.bars = (await api("/instruments/" + state.selected + "/bars")).items;
@@ -348,7 +355,7 @@ function shell(content) {
         { class: "sidebar-bottom" },
         h("b", {}, "研究有边界，数据有出处"),
         h("p", {}, "当前仅提供数据核对与模拟操作。国金实盘尚未连接。"),
-        badge("PILOT · v0.1", "muted"),
+        badge("PILOT · v0.2", "muted"),
       ),
     ),
     h(
@@ -408,7 +415,9 @@ function heading(title, subtitle, actions) {
   );
 }
 function banner() {
-  const demo = state.market.some((x) => x.mode === "demo");
+  const demo = (state.view === "paper" ? state.paperMarket : state.market).some(
+    (x) => x.mode === "demo",
+  );
   return h(
     "div",
     { class: "banner " + (demo ? "warn" : "") },
@@ -420,7 +429,7 @@ function banner() {
         ? "当前行情为合成演示数据，不代表真实价格。模拟时钟：" +
             state.account.as_of +
             "；推进日期才会尝试撮合委托。"
-        : "数据来自用户导入，尚未经商业行情供应商验证。分析和模拟均基于指定时点，不提供实时交易。",
+        : "在线日线自动保存并可直接研究；按行情表显示的数据日期为准，非实时行情。在线研究与历史模拟使用独立数据，下载不会覆盖模拟记录。",
     ),
   );
 }
@@ -464,8 +473,8 @@ function stockTable(items, compact = false) {
   if (!items.length)
     return empty(
       "工作区还没有行情",
-      "先载入演示数据，或在数据中心导入你有权使用的日线。",
-      button("载入演示数据", loadDemo, "primary small"),
+      "输入股票代码即可一键获取日线，不需要下载或上传文件。",
+      button("一键获取行情", () => navigate("data"), "primary small"),
     );
   return table(
     ["证券 / 代码", "收盘价", "数据日期", "来源", "操作"],
@@ -485,7 +494,11 @@ function stockTable(items, compact = false) {
           "td",
           {},
           badge(
-            x.mode === "demo" ? "合成演示" : "用户导入",
+            x.mode === "demo"
+              ? "合成演示"
+              : x.mode === "online"
+                ? "在线日线"
+                : "用户导入",
             x.mode === "demo" ? "warn" : "muted",
           ),
         ),
@@ -657,7 +670,7 @@ function dashboard() {
               "数据准备",
               state.market.length
                 ? state.market.length + " 个证券，均明确标注来源"
-                : "待载入或导入日线",
+                : "输入代码即可获取日线",
             ],
             [
               "02",
@@ -730,9 +743,10 @@ function watchlist() {
     heading(
       "自选行情",
       "价格与日期可核对，数据来源始终可见。",
-      button("导入日线", () => navigate("data"), "primary"),
+      button("＋ 获取行情", () => navigate("data"), "primary"),
     ),
     banner(),
+    card("收盘日线 · " + (state.selected || "待获取"), chart(), selectStock()),
     card(
       "证券列表",
       h("div", {}, h("div", { class: "toolbar" }, input, engine), container),
@@ -857,7 +871,11 @@ function report() {
       "div",
       { class: "report-head" },
       badge(
-        r.mode === "demo" ? "合成演示数据" : "用户导入数据",
+        r.mode === "demo"
+          ? "合成演示数据"
+          : r.mode === "online"
+            ? "在线获取日线"
+            : "用户导入数据",
         r.mode === "demo" ? "warn" : "muted",
       ),
       badge(r.internal_only ? "仅限内部研究" : "事实核对"),
@@ -918,7 +936,7 @@ function paperPage() {
   const symbolSelect = h(
     "select",
     { name: "symbol", required: true },
-    state.market.map((x) =>
+    state.paperMarket.map((x) =>
       h(
         "option",
         { value: x.symbol },
@@ -952,7 +970,11 @@ function paperPage() {
     }),
     h(
       "button",
-      { class: "btn primary", type: "submit", disabled: !state.market.length },
+      {
+        class: "btn primary",
+        type: "submit",
+        disabled: !state.paperMarket.length,
+      },
       "提交模拟委托",
     ),
   );
@@ -1082,6 +1104,147 @@ function paperPage() {
     ),
   ];
 }
+function onlineHistoryForm() {
+  const chinaNow = new Date(
+    new Date().toLocaleString("en-US", { timeZone: "Asia/Shanghai" }),
+  );
+  chinaNow.setDate(chinaNow.getDate() - 1);
+  const iso = (d) =>
+    [
+      d.getFullYear(),
+      String(d.getMonth() + 1).padStart(2, "0"),
+      String(d.getDate()).padStart(2, "0"),
+    ].join("-");
+  const end = iso(chinaNow);
+  const startDate = new Date(chinaNow);
+  startDate.setFullYear(startDate.getFullYear() - 1);
+  const symbolInput = h("input", {
+    name: "symbol",
+    type: "text",
+    required: true,
+    maxlength: 12,
+    placeholder: "例如 000001 或 600519",
+    value: state.selected || "000001",
+    autocomplete: "off",
+  });
+  const status = h(
+    "p",
+    { class: "sub", role: "status", "aria-live": "polite" },
+    "自动识别沪深代码，获取后加入自选并打开图表。无需注册数据账号或处理CSV。",
+  );
+  const submit = h(
+    "button",
+    { class: "btn primary", type: "submit" },
+    "一键获取行情",
+  );
+  const form = h(
+    "form",
+    {
+      id: "online-history-form",
+      onSubmit: async (e) => {
+        e.preventDefault();
+        submit.disabled = true;
+        submit.textContent = "正在连接行情源…";
+        status.textContent =
+          "正在获取历史日线，请稍候。网络异常会显示具体原因，不会生成替代行情。";
+        try {
+          const fields = Object.fromEntries(new FormData(e.currentTarget));
+          const result = await api("/data/fetch", "POST", fields);
+          state.selected = result.symbol;
+          await refresh();
+          state.view = "watchlist";
+          render();
+          toast(
+            (result.cached ? "已读取缓存" : "已获取") +
+              " " +
+              result.downloaded +
+              " 条日线，最新日期 " +
+              result.last,
+          );
+        } catch (err) {
+          status.textContent = err.message;
+          status.className = "sub fetch-error";
+          toast(err.message);
+        } finally {
+          submit.disabled = false;
+          submit.textContent = "一键获取行情";
+        }
+      },
+    },
+    h("label", { class: "field" }, "股票代码", symbolInput),
+    h(
+      "div",
+      { class: "chips" },
+      [
+        ["000001", "平安银行"],
+        ["600519", "贵州茅台"],
+        ["600036", "招商银行"],
+      ].map(([code, name]) =>
+        button(
+          name + " · " + code,
+          () => {
+            symbolInput.value = code;
+            symbolInput.focus();
+          },
+          "small",
+        ),
+      ),
+    ),
+    h(
+      "div",
+      { class: "form-grid" },
+      field("开始日期", "date", "start", iso(startDate), { max: end }),
+      field("结束日期", "date", "end", end, { max: end }),
+    ),
+    submit,
+    status,
+  );
+  return card("一键获取历史行情", form, badge("自动保存 · 无需上传"));
+}
+async function preparePaper(symbol) {
+  const nonempty = state.paperMarket.length || state.history.orders.length;
+  if (nonempty) {
+    const value = prompt(
+      "开始新的历史模拟将清空当前模拟订单、持仓与流水，保留在线行情和研究报告。输入 RESET SIMULATION 确认；取消则不更改：",
+    );
+    if (value !== "RESET SIMULATION") return;
+    await api("/paper/reset", "POST", { confirmation: value });
+  }
+  await api("/data/use-for-paper", "POST", { symbol });
+  await navigate("paper");
+  toast("已用下载行情建立历史模拟；模拟时钟从最早数据日开始");
+}
+function onlineHistoryCard() {
+  const online = state.market.filter((x) => x.mode === "online");
+  if (!online.length)
+    return card(
+      "在线行情工作区",
+      empty(
+        "输入代码，一键开始",
+        "获取完成后，日线会自动保存、加入自选并用于研究，不影响模拟账户。",
+      ),
+    );
+  return card(
+    "已获取的在线行情",
+    h(
+      "div",
+      {},
+      online.map((x) =>
+        h(
+          "div",
+          { class: "row" },
+          h(
+            "div",
+            {},
+            h("strong", {}, (names[x.symbol] || x.symbol) + " · " + x.symbol),
+            h("p", { class: "sub" }, "最新日线 " + x.date + " · " + x.source),
+          ),
+          button("用于历史模拟", () => preparePaper(x.symbol), "small"),
+        ),
+      ),
+    ),
+  );
+}
 function dataPage() {
   const source = field("数据出处（必填，用于报告溯源）", "text", "source", "", {
     placeholder: "例如：本人有权使用的数据供应商导出",
@@ -1127,46 +1290,56 @@ function dataPage() {
   return [
     heading(
       "数据中心",
-      "不把免费可读取的数据默认当作有商业再分发权的数据。",
-      button(
-        "下载 CSV 模板",
-        () =>
-          download(
-            "daily-bars-template.csv",
-            "symbol,date,open,high,low,close,volume,tradable\n000001.SZ,2025-01-02,10,10.2,9.9,10.1,100000,1\n000001.SZ,2025-01-03,10.1,10.3,10,10.2,120000,1\n",
-          ),
-        "small",
-      ),
+      "输入代码 → 一键获取 → 自动保存、显示图表并开始研究。",
+      button("查看自选行情 →", () => navigate("watchlist"), "small"),
     ),
+    h("div", { class: "grid" }, onlineHistoryForm(), onlineHistoryCard()),
     h(
-      "div",
-      { class: "grid" },
-      card("导入日线", form, badge("用户私有数据")),
-      card(
-        "快速体验",
-        h(
-          "div",
-          {},
-          h(
-            "p",
-            { class: "sub" },
-            "生成35条工作日日线 × 3个示例代码，仅用于验证页面、任务和模拟账本；不代表交易所历史行情。",
+      "details",
+      { class: "card secondary-import" },
+      h("summary", {}, "备用方式：导入CSV或体验合成数据"),
+      h(
+        "div",
+        { class: "grid" },
+        card(
+          "导入日线",
+          form,
+          button(
+            "下载 CSV 模板",
+            () =>
+              download(
+                "daily-bars-template.csv",
+                "symbol,date,open,high,low,close,volume,tradable\n000001.SZ,2025-01-02,10,10.2,9.9,10.1,100000,1\n000001.SZ,2025-01-03,10.1,10.3,10,10.2,120000,1\n",
+              ),
+            "small",
           ),
+        ),
+        card(
+          "快速体验",
           h(
             "div",
-            { class: "chips" },
-            button("载入合成演示数据", loadDemo, "primary"),
-          ),
-          h(
-            "p",
-            { class: "sub" },
-            "演示数据和导入数据不可混用。同一证券、日期的数据导入后不能覆盖，避免改变历史分析依据。",
+            {},
+            h(
+              "p",
+              { class: "sub" },
+              "生成35条工作日日线 × 3个示例代码，仅用于验证页面、任务和模拟账本；不代表交易所历史行情。",
+            ),
+            h(
+              "div",
+              { class: "chips" },
+              button("载入合成演示数据", loadDemo, "primary"),
+            ),
+            h(
+              "p",
+              { class: "sub" },
+              "演示数据和导入数据不可混用。同一证券、日期的数据导入后不能覆盖，避免改变历史分析依据。",
+            ),
           ),
         ),
       ),
     ),
     card(
-      "导入与模拟规则",
+      "历史行情与模拟说明",
       h(
         "div",
         {},
@@ -1178,7 +1351,7 @@ function dataPage() {
         h(
           "p",
           { class: "sub" },
-          "导入新工作区后模拟时钟从最早日期开始。图表和分析看不到其后的日线，但模拟撮合按用户推进读取后续数据。",
+          "在线图表和研究使用已获取日线；历史模拟独立保存快照、从最早日期开始，并只显示模拟时点以前的数据。下载行情不会推进模拟时钟。",
         ),
       ),
       badge("非实时数据", "warn"),
@@ -1427,7 +1600,7 @@ function settings() {
           h(
             "p",
             { class: "sub" },
-            "当前版本 v0.1.0 · 单主机试运行架构。会话有效期8小时，退出后服务端撤销当前会话。邮箱验证、密码找回、多端会话管理和运维后台尚未实现。",
+            "当前版本 v0.2.0 · 单主机试运行架构。会话有效期8小时，退出后服务端撤销当前会话。邮箱验证、密码找回、多端会话管理和运维后台尚未实现。",
           ),
           h(
             "div",

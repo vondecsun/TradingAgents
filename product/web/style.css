@@ -806,3 +806,23 @@ footer {
     height: 180px;
   }
 }
+
+.secondary-import {
+  margin-top: 20px;
+}
+.secondary-import summary {
+  cursor: pointer;
+  color: #627a7e;
+  font-size: 13px;
+  padding: 5px 0;
+}
+.secondary-import .grid {
+  margin-bottom: 0;
+}
+.fetch-error {
+  color: #b74738 !important;
+  margin-top: 12px;
+}
+#online-history-form > .sub {
+  margin-top: 12px;
+}
